@@ -1,50 +1,43 @@
-# Bluetooth — état au 2026-11-14 (en pause, demande du propriétaire)
+# Bluetooth: status as of 2026-11-14 (paused, owner's request)
 
-Le propriétaire a demandé de s'arrêter là pour le Bluetooth, sans build. On y reviendra plus tard.
+The owner asked to stop there for Bluetooth, without a build. We will come back to it later.
 
-## Ce qui marche (sur le téléphone, build 0213)
-- **Étape 1 (0211)** : la partie Bluetooth de la BCM4375 répond en HCI sur l'UART_BT (uart@10840000), à 115200 bauds avec RTS/CTS. HCI_Reset OK ; ROM : hci=9, lmp=9, manufacturer=0xf (Broadcom), lmp_subver=0x1111, nom « BCM4375B1 ».
-- **Étape 2 (0212)** : micrologiciel `bt.hcd` (bcm4375B1_semco.hcd, 176 645 o, 1261 enregistrements) chargé en 17 s, tout accepté. Après le lancement : révision HCI 0 → 0xad, nom « BCM4375B1 Beyond E43 Ant0 [Baseline: 0173] ». Le test écrivait « not confirmed » à tort (lmp_subver ne change pas sur cette puce).
-- Au boot, le noyau charge le micrologiciel puis **rééteint la puce** (BT_EN=0) ; le mux UART_BT est remis à 0x10.
-- Le Wi-Fi n'a jamais été gêné.
+## What works (on the phone, build 0213)
+- **Step 1 (0211)**: the Bluetooth part of the BCM4375 answers HCI on the UART_BT (uart@10840000), at 115200 bauds with RTS/CTS. HCI_Reset OK; ROM: hci=9, lmp=9, manufacturer=0xf (Broadcom), lmp_subver=0x1111, name "BCM4375B1".
+- **Step 2 (0212)**: firmware `bt.hcd` (bcm4375B1_semco.hcd, 176 645 B, 1261 records) loaded in 17 s, everything accepted. After launch: HCI revision 0 → 0xad, name "BCM4375B1 Beyond E43 Ant0 [Baseline: 0173]". The test wrongly wrote "not confirmed" (lmp_subver does not change on this chip).
+- At boot, the kernel loads the firmware then **powers the chip down again** (BT_EN=0); the UART_BT mux is set back to 0x10.
+- Wi-Fi was never disturbed.
 
-## Ce qui est installé (dans 0213)
-- `iokit/Kernel/arm/B2LBluetooth.cpp` (étape 2), entrées dans `iokit/conf/files` et `iokit/KernelConfigTables.cpp`.
-- `bsd/kern/b2l_userspace_seed.h` : `b2l_bt_fetch()` après `b2l_wifi_fetch()`.
-- SYSTEM : `/b2l-wifi/bt.hcd` (copie de `~/Developer/s10-port/device-s10/wifi-bt-fw/system/bt.hcd`, hors git).
-- Boot-args : `b2l_bt=0` (rien), `1` (lecture seule), `2` (sans micrologiciel), défaut = étape 2.
+## What is installed (in 0213)
+- `iokit/Kernel/arm/B2LBluetooth.cpp` (step 2), entries in `iokit/conf/files` and `iokit/KernelConfigTables.cpp`.
+- `bsd/kern/b2l_userspace_seed.h`: `b2l_bt_fetch()` after `b2l_wifi_fetch()`.
+- SYSTEM: `/b2l-wifi/bt.hcd` (copy of `~/Developer/s10-port/device-s10/wifi-bt-fw/system/bt.hcd`, outside git).
+- Boot-args: `b2l_bt=0` (nothing), `1` (read-only), `2` (without firmware), default = step 2.
 
-## Étape 3 préparée, jamais flashée (branchement à iOS)
-- Rangée dans `~/Developer/s10-port/bluetooth-step3-parked/` : `B2LBluetooth.cpp` (sha eab8b5a2…), `b2l_exec_bluetooth.h`, `b2l_bt_seed.h`, `b2l_bluetool_payload.h` et `bluetooth-step3-shared.patch` (pour `b2l_userspace_seed.h`, `b2l_exec_graphics_diag.h` et `b2l_amfi_constraint.h`). Pour l'appliquer : copier les fichiers dans `xnu-overlay/` aux mêmes chemins, puis lancer `patch -p0` depuis `beyond2lte-ios/`.
-- Principe : bluetoothd 23G90 ouvre le contrôleur par `BT_HCI_TRANSPORT=H4:POSIX:com.apple.uart.sk.bluetooth,115200`, un kernel control (PF_SYSTEM). Le noyau garde la puce allumée et relaie UART ↔ client. BlueTool est remplacé par une dylib injectée (`/usr/local/lib/b2l-bluetool-v1.dylib`, publiée par la graine, autorisée par la politique dyld AMFI). Adresse synthétique écrite par Write_BD_ADDR.
-- Sources hôte : `userspace/b2l-bluetool.c`, `scripts/build-bluetool-dylib.py`. Plan détaillé : `docs/bluetooth/plan.md` §6.
-- Risques notés : bac à sable de BlueTool ; plantage de bluetoothd à l'extinction (case +0x60, vue par ios-pipa) ; 115200 bauds trop lents pour l'A2DP ; appairages pas encore persistants.
+## Step 3 prepared, never flashed (hooking into iOS)
+- Parked in `~/Developer/s10-port/bluetooth-step3-parked/`: `B2LBluetooth.cpp` (sha eab8b5a2…), `b2l_exec_bluetooth.h`, `b2l_bt_seed.h`, `b2l_bluetool_payload.h` and `bluetooth-step3-shared.patch` (for `b2l_userspace_seed.h`, `b2l_exec_graphics_diag.h` and `b2l_amfi_constraint.h`). To apply it: copy the files into `xnu-overlay/` at the same paths, then run `patch -p0` from `beyond2lte-ios/`.
+- Principle: bluetoothd 23G90 opens the controller through `BT_HCI_TRANSPORT=H4:POSIX:com.apple.uart.sk.bluetooth,115200`, a kernel control (PF_SYSTEM). The kernel keeps the chip powered on and relays UART ↔ client. BlueTool is replaced by an injected dylib (`/usr/local/lib/b2l-bluetool-v1.dylib`, published by the seed, allowed by the AMFI dyld policy). Synthetic address written by Write_BD_ADDR.
+- Host sources: `userspace/b2l-bluetool.c`, `scripts/build-bluetool-dylib.py`. Detailed plan: `docs/bluetooth/plan.md` §6.
+- Noted risks: BlueTool's sandbox; bluetoothd crash at power-down (+0x60 hole, seen by ios-pipa); 115200 bauds too slow for A2DP; pairings not yet persistent.
 
-## Build 0214 interrompu
-- Le build 0214 (étape 3) a été arrêté à la demande du propriétaire, pendant le hachage côté Mac de l'étage SYSTEM, avant toute écriture. Ni SYSTEM ni BOOT n'ont été écrits : le téléphone est toujours en 0213.
-- `xnu/` et `xnu-overlay/` sont remis à l'état 0213 pour le Bluetooth (copies dans `~/Developer/s10-port/bak-0214/`). Le prochain build réutilisera le numéro 0214 ou le suivant.
+## Build 0214 interrupted
+- Build 0214 (step 3) was stopped at the owner's request, during the Mac-side hashing of the SYSTEM stage, before any write. Neither SYSTEM nor BOOT was written: the phone is still on 0213.
+- `xnu/` and `xnu-overlay/` are reset to the 0213 state for Bluetooth (copies in `~/Developer/s10-port/bak-0214/`). The next build will reuse number 0214 or the following one.
 
-## Pour reprendre
-1. Remettre l'étape 3 en place, voir plus haut.
-2. Construire, puis vérifier dans le journal : « THE FIRMWARE RUNS », « THE RADIO IS UP for iOS », « H4: client connected », « TOOL: RunBuiltinScript boot -> 0 », « iOS sends HCI … ».
-3. Dans Réglages : l'interrupteur Bluetooth, puis une recherche d'appareils.
+## To resume
+1. Put step 3 back in place, see above.
+2. Build, then check in the log: "THE FIRMWARE RUNS", "THE RADIO IS UP for iOS", "H4: client connected", "TOOL: RunBuiltinScript boot -> 0", "iOS sends HCI …".
+3. In Settings: the Bluetooth toggle, then a device search.
 
-## Mise à jour 2026-11-17 (0270 flashé, démarré en 0271)
-Le noyau fait tout jusqu'au point H4. bluetoothd ne démarre pas, car il est désactivé dans le `disabled.plist` de
-launchd du USERDATA propre (0250). Correctif prêt dans `xnu-overlay/bsd/kern/b2l_bt_seed.h` (renommage
-`com.apple.bluetoothd` → `com.apple.bluetoothX`), en attente de l'accord USERDATA. Détail : `build-b1l-0270.md`.
+## Update 2026-11-17 (0270 flashed, booted into 0271)
+The kernel does everything up to the H4 point. bluetoothd does not start, because it is disabled in the `disabled.plist` of
+launchd on the clean USERDATA (0250). Fix ready in `xnu-overlay/bsd/kern/b2l_bt_seed.h` (rename
+`com.apple.bluetoothd` → `com.apple.bluetoothX`), waiting for the USERDATA go-ahead. Details: `build-b1l-0270.md`.
 
 
-## Build 0272 (2026-11-17) : bluetoothd lancé, mais plante au démarrage
-- La graine a bien renommé la clé : bluetoothd est lancé, avec nos variables (`Searching for transport: "H4"`, `driver: "POSIX"`).
-- Il plante en boucle (17 fois, « Too many corpses ») : EXC_BAD_ACCESS à l'adresse 0x31c, à 0x1004040bc sur le fil principal
-  (rapports `bluetoothd-*.ips` dans USERDATA, os_log : `Unknown platform 0xffffffff detected`).
-- Cause : `MGGetProductType()` renvoie 0xffffffff, car MobileGestalt ne connaît pas le modèle de ce téléphone. La table des
-  plateformes de bluetoothd (0x1004312a0, 88 appels à `MGIsDeviceOneOfType`) ne reconnaît rien, l'objet plateforme reste
-  nul et bluetoothd lit son champ +0x31c (le numéro de plateforme, utilisé à plus de 400 endroits).
-- Correctif (build commun suivant, `b2l-bluetool-v2.dylib`) : la dylib est aussi insérée dans bluetoothd. Elle répond « oui »
-  à `MGIsDeviceOneOfType` au seul site d'appel qui crée la plateforme choisie, et laisse passer tous les autres appels.
-  Plateforme 0x16 par défaut (famille Broadcom la plus répandue) ; boot-arg `b2l_bt_platform=0x13|0x14|0x17|0x18|0x19`,
-  `0` = rien. Garde : UUID de bluetoothd 23G90 (DA7ADF00-…). AMFI autorise aussi le pid de bluetoothd (`b2l_btd_dyld_pid`).
-- Pas encore traité : crash possible quand on éteint le Bluetooth (case +0x60 de la table H4, vue par ios-pipa), commandes
-  Broadcom refusées par la BCM4375 (le noyau les journalise : `refused by the chip`), 115200 bauds pour l'A2DP.
+## Build 0272 (2026-11-17): bluetoothd launched, but crashes at startup
+- The seed did rename the key: bluetoothd is launched, with our variables (`Searching for transport: "H4"`, `driver: "POSIX"`).
+- It crashes in a loop (17 times, "Too many corpses"): EXC_BAD_ACCESS at address 0x31c, at 0x1004040bc on the main thread (reports `bluetoothd-*.ips` in USERDATA, os_log: `Unknown platform 0xffffffff detected`).
+- Cause: `MGGetProductType()` returns 0xffffffff, because MobileGestalt does not know this phone's model. bluetoothd's platform table (0x1004312a0, 88 calls to `MGIsDeviceOneOfType`) recognizes nothing, the platform object stays null, and bluetoothd reads its field +0x31c (the platform number, used in more than 400 places).
+- Fix (next common build, `b2l-bluetool-v2.dylib`): the dylib is also inserted into bluetoothd. It answers "yes" to `MGIsDeviceOneOfType` at the only call site that creates the chosen platform, and lets all other calls through. Platform 0x16 by default (the most common Broadcom family); boot-arg `b2l_bt_platform=0x13|0x14|0x17|0x18|0x19`, `0` = nothing. Guard: UUID of bluetoothd 23G90 (DA7ADF00-…). AMFI also allows bluetoothd's pid (`b2l_btd_dyld_pid`).
+- Not yet handled: possible crash when Bluetooth is turned off (+0x60 hole in the H4 table, seen by ios-pipa), Broadcom commands refused by the BCM4375 (the kernel logs them: `refused by the chip`), 115200 bauds for A2DP.

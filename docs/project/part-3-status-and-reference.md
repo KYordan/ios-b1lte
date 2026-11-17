@@ -1,150 +1,150 @@
-# Documentation du projet — Port iOS 26 sur Galaxy S10 (beyond1lte)
+# Project documentation — iOS 26 port to the Galaxy S10 (beyond1lte)
 
-## Partie 3 — Journaux de build, état actuel, plan GPU et référence
+## Part 3 — Build logs, current status, GPU plan and reference
 
 ---
 
-### 11. Journaux de build (`docs/journal/build-b1l-XXXX.md`)
+### 11. Build logs (`docs/journal/build-b1l-XXXX.md`)
 
-114 journaux existent (0001 à 0139, avec des trous). Chaque journal contient : Date, Base, Objectif, Changements, Installé (hash BOOT relu), Résultat, Rollback.
+114 logs exist (0001 to 0139, with gaps). Each log contains: Date, Base, Goal, Changes, Installed (re-read BOOT hash), Result, Rollback.
 
-**Progression majeure :**
+**Major progress:**
 
-| Build | Ce qui a changé / résultat |
+| Build | What changed / result |
 |-------|---------------------------|
-| **0001** | Premier démarrage XNU sur le S10, sans iOS. 8/8 CPU vérifiés. Panic attendu (pas de racine HFS). |
-| **0004** | `BKNoWatchdogs = YES` dans les préférences de SpringBoard (empêche le watchdog de tuer Réglages). |
-| **0005** | Écran logique 880×1912 @2x (440×956 points, taille iPhone 16 Pro Max) au lieu de 960×2026. Réduction de 2,6× du nombre de pixels. |
-| **0014** | DVFS CPU (A55 1846, A75 2210, M4 2080 MHz) + sonde GPU G1 (lecture seule). GPU_ID `0x72110000` (G76), 12 cœurs. |
-| **0015** | Variables CoreAnimation injectées par le kernel (`CA_DISABLE_ASYNCHRONOUS`). Clavier fonctionne (lent). |
-| **0016** | GPU G2a : soft reset, L2/tiler/shaders allumés et éteints. |
-| **0017** | IOSurface multi-plan + premier job GPU (WRITE_VALUE `0xb21cafe5` exécuté par le Mali). |
-| **0028** | Throttle thermique T1 (capteurs TMU 9820 corrigés). |
-| **0029** | GPU G3 : service noyau HakiosMali démarré, jobs en mode identité puis par tables de pages. |
-| **0030** | T1 corrigé + G4 : fréquence GPU à 676 MHz par ACPM. Puce plafonne à 62-66 °C au lieu de 76 °C. |
-| **0040** | RAM des banques basses traitée comme DRAM (corrige un panic d'alignement Mesa). |
-| **0041/0042** | iOS rendu par le GPU (EAGL → Mesa Panfrost → Mali). Plus lent et plus cassé que le CPU. |
-| **0043** | Retour au rendu CPU par défaut (GLES en secours, `b2l_gl=1`). Décision de passer à Metal. |
-| **0044** | Service noyau `IOAcceleratorES` annonçant un plug-in Metal. |
-| **0045** | `MTLCreateSystemDefaultDevice()` renvoie le GPU. |
-| **0047-0049** | Plantages Metal corrigés, test hors backboardd. |
-| **0051** | Copie et remplissage de 256 Ko faits par le Mali, exacts à l'octet près. |
-| **0055** | Plug-in Metal Scion intégré : 0 méthode manquante sur 129 (MTLDevice) et 414 (MTLDeviceSPI). `image_calcminmax0` exécuté avec résultats justes. |
-| **0058-0066** | Correction des bugs de rendu Metal (constantes shader, viewport, couverture). Dessin QuartzCore juste sur le Mali (B1L-0066 : grille 16×16 identique au logiciel). |
-| **0070-0073** | Texture Metal sur IOSurface : Mali efface en rouge puis vert, relu juste par le CPU. `CAMetalLayer` fonctionne, `presentDrawable` statut 4. Dessin QuartzCore dans le drawable identique au Mac (0 ligne sur 64 différente). |
-| **0074-0079** | Vitesse du pilote : de 8-15 ms à ~0.03-0.05 ms par dessin, puis 0 piège PAC par dessin, 26-56 µs par dessin. |
-| **0080-0083** | backboardd sur le Mali. Plantages corrigés (targetDeviceArchitecture, samplers inline, insertelement). Outil `air2nir` : 189 shaders QuartzCore vérifiés sur le Mac. |
-| **0084** | backboardd dessine sur le Mali pour la première fois (une image 1440×3040 envoyée à l'écran). |
-| **0088** | **L'interface d'iOS s'affiche rendue par le GPU** (accueil, Réglages, Centre de contrôle, Contacts, clavier). Défauts : teinte cyan, Liquid Glass sans flou, bord gauche coupé, clavier sans fond des touches. |
-| **0090-0095** | Varyings élargis à 32 bits, `demote` → `discard`, `bi_lower_swizzle` corrigé. Cache de shaders sur disque. 0 faute 0x51. Zéro copie activé (0 copie CPU). |
-| **0096-0098** | Plus de dessin progressif. Zéro copie actif (IDMA, surfaces contiguës). Viewport ignoré 1126 fois. |
-| **0099-0103** | Viewport et scissor servis. Lignes de 64 octets pour SpringBoard. Plus de gros tampons refusés (allocation par pages). Vues de texture. backboardd ne brûle plus le CPU (LDAPR). |
-| **0104-0112** | Tampons GPU ≥ 1 Mo alloués par pages. Attente asynchrone des command buffers. Plantage à l'ouverture des apps réglé (0112). 2-7 images/s, GPU 2-7%. Goulot d'attente. |
-| **0113-0115** | Constantes copiées seulement jusqu'où le shader lit (2-3.6 Go évités / 5s). 10-14 images/s. **« extrêmement plus fluide »** (propriétaire). |
-| **0116-0120** | Fond d'écran dessiné (dégradé, vagues, points) à la place du bleu uni. Retour à 0115 (régression 0118 retirée). |
-| **0121-0125** | Plage `kmem_data_shared` à 2999 Mo. Encodeur de copie (blit). Photo du propriétaire en fond d'écran. Verre toujours gris/noir. |
-| **0126-0128** | **Vrai Liquid Glass sur le bouton Focus du Centre de contrôle** (0127). **Liquid Glass rendu, photo en fond d'écran, « marche très bien »** (0128). Reflashable : `flash-saved.sh 0128`. |
-| **0129-0131** | Chaque attachement a sa propre action de chargement. Inventaire des shaders : aucun `path_*`, glyphes vibrants = `fixed_frag` framebuffer fetch. Panfrost recharge les cibles relues : glyphes Wi-Fi, AirDrop, cellulaire, Bluetooth, AirPlay du Centre de contrôle rendus. |
-| **0132** | Images à lignes non alignées copiées au lieu d'être refusées. Icônes du menu d'extinction réparées. Aucun changement visible pour les glyphes manquants. |
-| **0133** | backboardd n'importe que 3 IOSurface (fond, luminosité, InCallService). `chronod` reçoit « unsupported » pour 4 sélecteurs IOSurface. Aucune surface de glyphe ou de widget. |
-| **0134** | Noyau accepte les 4 appels de chronod. Aucun changement visible. 7 imports IOSurface, tous grands. |
-| **0135** | Les textures de glyphes et d'icônes arrivent bien aux shaders (23 formes RGBA8 toutes échantillonnées). 3 imports seulement. Les instantanés d'icônes `240x240 LA08` ne sont importés qu'une fois, **avant** que l'application les dessine. |
-| **0136** | Copie d'IOSurface à lignes non alignées relue avant chaque dessin (instantanés d'icônes vivants). **Constat : la piste « copie périmée » n'est pas la cause — le chemin n'est jamais exécuté.** Aucune surface `240x240` n'est importée. Aucune `B2L LIVE: surface`. `MobileTimer id 16`, `MobileCal id 26/30`, `Spotlight id 14` créent bien des surfaces `240x240 LA08` mais elles sont créées puis abandonnées (jamais de lookup, jamais d'import). |
-| **0137** | Instrumentation des accès IOSurface (lookup, create port, metadata) avec ID de surface et PID. **Constat : aucune surface `240x240` n'est jamais look up ; le chemin n'existe pas.** |
-| **0138** | Accepte le sélecteur IOSurface 17 pour `iconservicesagent`. `accepted 17`, mais toujours aucun lookup sur les surfaces `240x240`. Le sélecteur 17 n'était pas le blocage. |
-| **0139** (en cours) | Instrumentation userspace (`hakiosmetal_air.m`, ensemble `b2l-metal-v88`) pour tracer : création de texture `240x240`, liaison à un sampler de fragment, upload via `replaceRegion:`. Objectif : confirmer si le chemin Metal consomme ou non les instantanés d'icône `240x240 LA08`. Résultat en attente. |
+| **0001** | First XNU boot on the S10, without iOS. 8/8 CPUs verified. Expected panic (no HFS root). |
+| **0004** | `BKNoWatchdogs = YES` in SpringBoard preferences (prevents the watchdog from killing Settings). |
+| **0005** | Logical screen 880×1912 @2x (440×956 points, iPhone 16 Pro Max size) instead of 960×2026. 2.6× reduction in pixel count. |
+| **0014** | CPU DVFS (A55 1846, A75 2210, M4 2080 MHz) + GPU G1 probe (read-only). GPU_ID `0x72110000` (G76), 12 cores. |
+| **0015** | CoreAnimation variables injected by the kernel (`CA_DISABLE_ASYNCHRONOUS`). Keyboard works (slow). |
+| **0016** | GPU G2a: soft reset, L2/tiler/shaders powered on and off. |
+| **0017** | Multi-plane IOSurface + first GPU job (WRITE_VALUE `0xb21cafe5` executed by the Mali). |
+| **0028** | Thermal throttling T1 (9820 TMU sensors corrected). |
+| **0029** | GPU G3: HakiosMali kernel service started, jobs in identity mode then through page tables. |
+| **0030** | T1 fixed + G4: GPU frequency at 676 MHz via ACPM. Chip caps at 62-66 °C instead of 76 °C. |
+| **0040** | Low-bank RAM treated as DRAM (fixes a Mesa alignment panic). |
+| **0041/0042** | iOS rendered by the GPU (EAGL → Mesa Panfrost → Mali). Slower and more broken than the CPU. |
+| **0043** | Back to CPU rendering by default (GLES as fallback, `b2l_gl=1`). Decision to move to Metal. |
+| **0044** | `IOAcceleratorES` kernel service announcing a Metal plug-in. |
+| **0045** | `MTLCreateSystemDefaultDevice()` returns the GPU. |
+| **0047-0049** | Metal crashes fixed, test outside backboardd. |
+| **0051** | 256 KB copy and fill done by the Mali, exact to the byte. |
+| **0055** | Metal Scion plug-in integrated: 0 missing methods out of 129 (MTLDevice) and 414 (MTLDeviceSPI). `image_calcminmax0` executed with correct results. |
+| **0058-0066** | Metal rendering bugs fixed (shader constants, viewport, coverage). QuartzCore drawing correct on the Mali (B1L-0066: 16×16 grid identical to software). |
+| **0070-0073** | Metal texture on IOSurface: Mali clears to red then green, read back correctly by the CPU. `CAMetalLayer` works, `presentDrawable` status 4. QuartzCore drawing in the drawable identical to the Mac (0 of 64 lines differ). |
+| **0074-0079** | Driver speed: from 8-15 ms to ~0.03-0.05 ms per draw, then 0 PAC traps per draw, 26-56 µs per draw. |
+| **0080-0083** | backboardd on the Mali. Crashes fixed (targetDeviceArchitecture, inline samplers, insertelement). `air2nir` tool: 189 QuartzCore shaders verified on the Mac. |
+| **0084** | backboardd draws on the Mali for the first time (a 1440×3040 image sent to the screen). |
+| **0088** | **iOS interface displayed, rendered by the GPU** (home, Settings, control center, contacts, keyboard). Defects: cyan tint, Liquid Glass without blur, left edge cut off, keyboard keys without background. |
+| **0090-0095** | Varyings widened to 32 bits, `demote` → `discard`, `bi_lower_swizzle` fixed. On-disk shader cache. 0 faults 0x51. Zero copy enabled (0 CPU copies). |
+| **0096-0098** | No more progressive drawing. Zero copy active (IDMA, contiguous surfaces). Viewport ignored 1126 times. |
+| **0099-0103** | Viewport and scissor served. 64-byte lines for SpringBoard. No more large buffers refused (page allocation). Texture views. backboardd no longer burns the CPU (LDAPR). |
+| **0104-0112** | GPU buffers ≥ 1 MB allocated by page. Asynchronous waiting for command buffers. App opening crash fixed (0112). 2-7 frames/s, GPU 2-7%. Waiting bottleneck. |
+| **0113-0115** | Constants copied only up to where the shader reads them (2-3.6 GB avoided / 5 s). 10-14 frames/s. **"extremely smoother"** (owner). |
+| **0116-0120** | Wallpaper drawn (gradient, waves, dots) instead of the flat blue. Back to 0115 (regression from 0118 removed). |
+| **0121-0125** | `kmem_data_shared` range at 2999 MB. Copy encoder (blit). Owner's photo as wallpaper. Glass still grey/black. |
+| **0126-0128** | **Real Liquid Glass on the Focus button of the Control Center** (0127). **Liquid Glass rendered, photo wallpaper, "works very well"** (0128). Reflashable: `flash-saved.sh 0128`. |
+| **0129-0131** | Each attachment has its own load action. Shader inventory: no `path_*`, vibrant glyphs = `fixed_frag` framebuffer fetch. Panfrost reloads the re-read targets: Wi-Fi, AirDrop, cellular, Bluetooth, AirPlay glyphs of the Control Center rendered. |
+| **0132** | Images with unaligned lines copied instead of refused. Power-off menu icons repaired. No visible change for the missing glyphs. |
+| **0133** | backboardd imports only 3 IOSurfaces (background, brightness, InCallService). `chronod` receives "unsupported" for 4 IOSurface selectors. No glyph or widget surface. |
+| **0134** | Kernel accepts the 4 chronod calls. No visible change. 7 IOSurface imports, all large. |
+| **0135** | Glyph and icon textures do reach the shaders (23 RGBA8 shapes all sampled). Only 3 imports. The `240x240 LA08` icon snapshots are imported only once, **before** the app draws them. |
+| **0136** | Copy of unaligned-line IOSurface re-read before each draw (live icon snapshots). **Finding: the "stale copy" lead is not the cause — the path is never executed.** No `240x240` surface is imported. No `B2L LIVE: surface`. `MobileTimer id 16`, `MobileCal id 26/30`, `Spotlight id 14` do create `240x240 LA08` surfaces, but they are created then abandoned (never looked up, never imported). |
+| **0137** | Instrumentation of IOSurface accesses (lookup, create port, metadata) with surface ID and PID. **Finding: no `240x240` surface is ever looked up; the path does not exist.** |
+| **0138** | Accepts IOSurface selector 17 for `iconservicesagent`. `accepted 17`, but still no lookup on the `240x240` surfaces. Selector 17 was not the blocker. |
+| **0139** (in progress) | Userspace instrumentation (`hakiosmetal_air.m`, set `b2l-metal-v88`) to trace: creation of `240x240` textures, binding to a fragment sampler, upload via `replaceRegion:`. Goal: confirm whether the Metal path does or does not consume the `240x240 LA08` icon snapshots. Result pending. |
 
-**Build stable de référence pour rollback :** 0128 (ensemble `b2l-metal-v77`), reflashable avec `flash-saved.sh 0128`.
+**Stable reference build for rollback:** 0128 (set `b2l-metal-v77`), reflashable with `flash-saved.sh 0128`.
 
 ---
 
-### 12. Plan GPU (Mali-G76 MP12) — `docs/gpu/plan.md`
+### 12. GPU plan (Mali-G76 MP12) — `docs/gpu/plan.md`
 
-Décision du propriétaire : **ne plus investir dans le rendu CPU pour Liquid Glass et les effets ; tout passe par le GPU.**
+Owner decision: **stop investing in CPU rendering for Liquid Glass and effects; everything goes through the GPU.**
 
-Chaîne visée :
+Target chain:
 ```
 CoreAnimation (backboardd, CA::OGL::GLESContext)
-  └─ pont EAGL dans backboardd (libb2l-gl.dylib)
-       └─ libOSMesa + Mesa 25.0.7 Panfrost, compilateur Bifrost
-            └─ libdrm de remplacement → IOKit
-                 └─ service noyau B2LMali : interface DRM panfrost 1.2
-                      └─ Mali-G76 : MMU AS0, job slots 0/1, IRQ ou scrutation
+  └─ EAGL bridge in backboardd (libb2l-gl.dylib)
+       └─ libOSMesa + Mesa 25.0.7 Panfrost, Bifrost compiler
+            └─ replacement libdrm → IOKit
+                 └─ B2LMali kernel service: panfrost 1.2 DRM interface
+                      └─ Mali-G76: MMU AS0, job slots 0/1, IRQ or polling
 ```
 
-| Étape | Contenu | Statut |
+| Step | Content | Status |
 |-------|---------|--------|
-| G0 | Choix de la voie (GLES présent dans iOS 26) | Fait (`docs/gpu/g0.md`) |
-| G1 | Lecture de l'ID GPU | Fait (B1L-0014/0015) |
-| G2a | Reset + alimentation des cœurs | Fait (B1L-0016) |
-| G2b | Premier job GPU | Fait (B1L-0017) |
-| G3 | Service noyau B2LMali | Fait (B1L-0029) |
-| G3b | Interruptions (GIC au lieu de scrutation) | À faire |
-| G4 | Fréquence GPU (DVFS par ACPM) | Fait (B1L-0030, 676 MHz) |
-| G5 | Mesa pour iOS | À faire |
-| G6 | CoreAnimation sur le GPU (pont EAGL) | À faire |
-| G7 | Affichage sans copie (zéro copie) | Fait partiel (B1L-0096 à 0098) |
-| G8 | Liquid Glass | En cours (rendu sur bouton Focus, 0127-0128) |
+| G0 | Choice of path (GLES present in iOS 26) | Done (`docs/gpu/g0.md`) |
+| G1 | GPU ID read | Done (B1L-0014/0015) |
+| G2a | Reset + core power-up | Done (B1L-0016) |
+| G2b | First GPU job | Done (B1L-0017) |
+| G3 | B2LMali kernel service | Done (B1L-0029) |
+| G3b | Interrupts (GIC instead of polling) | To do |
+| G4 | GPU frequency (DVFS via ACPM) | Done (B1L-0030, 676 MHz) |
+| G5 | Mesa for iOS | To do |
+| G6 | CoreAnimation on the GPU (EAGL bridge) | To do |
+| G7 | Display without copy (zero copy) | Partly done (B1L-0096 to 0098) |
+| G8 | Liquid Glass | In progress (rendered on Focus button, 0127-0128) |
 
-**Étape T1 (prioritaire) :** throttle thermique CPU. Fait (B1L-0030) : puce plafonne à 62-66 °C au lieu de 76 °C.
+**Step T1 (priority):** CPU thermal throttling. Done (B1L-0030): chip caps at 62-66 °C instead of 76 °C.
 
 ---
 
-### 13. Plan Metal — `docs/metal-plan.md`
+### 13. Metal plan — `docs/metal-plan.md`
 
-Décidé après B1L-0042 : quitter GLES pour Metal car le serveur d'affichage et Liquid Glass d'iOS 26 sont écrits pour Metal.
+Decided after B1L-0042 to leave GLES for Metal, because iOS 26's display server and Liquid Glass are written for Metal.
 
-| Étape | Contenu | Statut |
+| Step | Content | Status |
 |-------|---------|--------|
-| M1 | Noyau publie `MetalPluginName=B2LMetal` / `MetalPluginClassName=B2LMetalDevice` | Fait (B1L-0044) |
-| M2 | Mémoire et copies faites par le GPU | Fait (B1L-0051) |
-| M3 | Exécuter des shaders d'Apple (calcul) | Fait (B1L-0055) |
-| M4 | Dessiner avec des shaders d'Apple | Fait (B1L-0066, dessin QuartzCore juste) |
-| M5 | Dessiner dans les surfaces d'écran (IOSurface) | Fait (B1L-0070 à 0073) |
-| M6 | L'interface d'iOS rendue par Metal | En cours (B1L-0088 à 0139) |
+| M1 | Kernel publishes `MetalPluginName=B2LMetal` / `MetalPluginClassName=B2LMetalDevice` | Done (B1L-0044) |
+| M2 | Memory and copies done by the GPU | Done (B1L-0051) |
+| M3 | Run Apple's shaders (compute) | Done (B1L-0055) |
+| M4 | Draw with Apple's shaders | Done (B1L-0066, correct QuartzCore drawing) |
+| M5 | Draw into screen surfaces (IOSurface) | Done (B1L-0070 to 0073) |
+| M6 | iOS interface rendered by Metal | In progress (B1L-0088 to 0139) |
 
-**Critères de réussite M6 :** 40 images/s en défilement sur l'accueil, Liquid Glass correct, plus rapide que le rendu CPU.
-
----
-
-### 14. Référence GPU du port S7 — `docs/gpu/herolte-reference.md`
-
-Le port Galaxy S7 (`wardevsa/ios-a5xelte`, iOS 16.7.16, Mali-T880 Midgard) sert de référence :
-- Chaîne : CoreAnimation (GLES) → pont EAGL → OSMesa + Mesa Panfrost → libdrm de remplacement (`herodrm.c`) → service kernel HeroGPU.
-- ~35-38 fps à 650 MHz.
-- Éléments transposables au S10 : service kernel de jobs (Job Manager), Mesa Panfrost, `herodrm.c`.
-- Point bloquant : pont EAGL + `ca_hooks.c` dépend du renderer GLES de CoreAnimation dans iOS 16, à vérifier dans iOS 26.
+**M6 success criteria:** 40 frames/s when scrolling the home screen, correct Liquid Glass, faster than CPU rendering.
 
 ---
 
-### 15. Faits mesurés sur le S10 — `docs/device-facts.md`
+### 14. GPU reference from the S7 port — `docs/gpu/herolte-reference.md`
 
-| Élément | Valeur |
+The Galaxy S7 port (`wardevsa/ios-a5xelte`, iOS 16.7.16, Mali-T880 Midgard) serves as a reference:
+- Chain: CoreAnimation (GLES) → EAGL bridge → OSMesa + Mesa Panfrost → replacement libdrm (`herodrm.c`) → HeroGPU kernel service.
+- ~35-38 fps at 650 MHz.
+- Parts transferable to the S10: kernel job service (Job Manager), Mesa Panfrost, `herodrm.c`.
+- Blocking point: the EAGL bridge + `ca_hooks.c` depends on CoreAnimation's GLES renderer in iOS 16; to be checked in iOS 26.
+
+---
+
+### 15. Measured facts on the S10 — `docs/device-facts.md`
+
+| Item | Value |
 |---------|--------|
 | `ro.boot.em.model` | `SM-G973F` |
 | `ro.product.device` (TWRP) | `beyond1lte` |
 | Bootloader | `G973FXXUHHXJ1` |
 | Recovery | TWRP 3.7.1_12 Artisan v2, kernel ExtremeKernel 4.14.356 |
-| DTB live `model` | `Samsung BEYOND1LTE EUR OPEN 26 board based on EXYNOS9820` |
-| RAM | ~7,1 Go visibles (MemTotal 7 421 288 kB), 8 cœurs |
-| Partition boot | `sda14`, 57 671 680 octets |
-| Partition system | `sda25`, 7 340 032 000 octets |
-| Partition userdata | `sda34`, 499 641 200 640 octets (~465 Gio) |
+| Live DTB `model` | `Samsung BEYOND1LTE EUR OPEN 26 board based on EXYNOS9820` |
+| RAM | ~7.1 GB visible (MemTotal 7 421 288 kB), 8 cores |
+| Boot partition | `sda14`, 57,671,680 bytes |
+| System partition | `sda25`, 7,340,032,000 bytes |
+| Userdata partition | `sda34`, 499,641,200,640 bytes (~465 GiB) |
 
-**Ce qui doit changer pour beyond1lte par rapport à beyond2lte :**
-1. UEFI : partir de l'overlay `beyond2ltePkg`, renommé `beyond1ltePkg`, avec le DTB du S10.
-2. DTB du boot.img : équivalent de `Resources/DTBs/beyond2lte.dtb` (base + overlay rev 26 + `model`).
-3. Identité et gardes : `package-boot.py` (board beyond1lte, model SM-G973F), `pull-b2l-log.py` (exiger `ro.boot.em.model == SM-G973F`), `DeviceTree.c`.
-4. Kernel XNU : aucune adresse matérielle à changer d'après les mesures.
+**What must change for beyond1lte compared to beyond2lte:**
+1. UEFI: start from the `beyond2ltePkg` overlay, renamed `beyond1ltePkg`, with the S10 DTB.
+2. boot.img DTB: equivalent of `Resources/DTBs/beyond2lte.dtb` (base + rev 26 overlay + `model`).
+3. Identity and guards: `package-boot.py` (board beyond1lte, model SM-G973F), `pull-b2l-log.py` (require `ro.boot.em.model == SM-G973F`), `DeviceTree.c`.
+4. XNU kernel: no hardware addresses to change according to the measurements.
 
 ---
 
-### 16. Récapitulatif de l'état global (2026-11-10)
+### 16. Summary of overall status (2026-11-10)
 
-Le projet a dépassé la phase de preuve de concept :
-- **Boot complet** : S-Boot → BootShim → UEFI → XnuLoader → XNU → HFS root → launchd → SpringBoard, vérifié sur le S10.
-- **Rendu GPU Metal actif** : l'interface iOS est rendue par le Mali-G76, avec Liquid Glass sur le bouton Focus du centre de contrôle.
-- **Performance** : 10-14 images/s, « extrêmement plus fluide » que le rendu CPU (propriétaire, B1L-0115).
-- **Reste à faire :** glyphes manquants (boutons ronds, Concentration, volume), icônes Horloge/Calendrier, widgets blancs, chemin des instantanés d'icône `240x240` (diagnostic en cours, builds 0136-0139), Wi-Fi, Bluetooth, audio, cellulaire, caméra, veille.
+The project has moved past the proof-of-concept phase:
+- **Full boot**: S-Boot → BootShim → UEFI → XnuLoader → XNU → HFS root → launchd → SpringBoard, verified on the S10.
+- **Metal GPU rendering active**: the iOS interface is rendered by the Mali-G76, with Liquid Glass on the Focus button of the control center.
+- **Performance**: 10-14 frames/s, "extremely smoother" than CPU rendering (owner, B1L-0115).
+- **Still to do:** missing glyphs (round buttons, Concentration, volume), Clock/Calendar icons, white widgets, the `240x240` icon snapshot path (diagnosis in progress, builds 0136-0139), Wi-Fi, Bluetooth, audio, cellular, camera, sleep.
 
-La documentation précédente (Parties 1 et 2) couvre l'arborescence, les scripts, l'environnement de build, le processus de build et la politique de sécurité.
+The previous documentation (Parts 1 and 2) covers the directory layout, the scripts, the build environment, the build process and the security policy.

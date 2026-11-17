@@ -1,178 +1,178 @@
-# Documentation du projet — Port iOS 26 sur Galaxy S10 (beyond1lte)
+# Project documentation — iOS 26 port to the Galaxy S10 (beyond1lte)
 
-## Partie 1 — Présentation, état actuel et arborescence
-
----
-
-### 1. Qu'est-ce que ce projet ?
-
-Ce projet porte **iOS 26** (build `23G90`, produit `iPhone17,2`, iPhone 16 Pro Max) sur un **Samsung Galaxy S10 (SM-G973F, codename beyond1lte, SoC Exynos 9820)**.
-
-Il adapte le port existant `beyond2lte-ios` (fait pour le Galaxy S10+, SM-G975F, même SoC Exynos 9820) au modèle plus petit S10 (beyond1lte). C'est une **démonstration de recherche**, pas un téléphone quotidien : pas d'appels, pas de 4G, pas de caméra, pas d'audio, pas de veille. Aucune donnée personnelle ne doit être placée sur cette installation (pas de chiffrement, pas de SEP, pas de signature réelle).
+## Part 1 — Overview, current status and directory layout
 
 ---
 
-### 2. Chaîne de boot (du bouton power à iOS)
+### 1. What is this project?
+
+This project runs **iOS 26** (build `23G90`, product `iPhone17,2`, iPhone 16 Pro Max) on a **Samsung Galaxy S10 (SM-G973F, codename beyond1lte, Exynos 9820 SoC)**.
+
+It adapts the existing port `beyond2lte-ios` (made for the Galaxy S10+, SM-G975F, same Exynos 9820 SoC) to the smaller S10 model (beyond1lte). It is a **research demonstration**, not a daily phone: no calls, no 4G, no camera, no audio, no sleep. No personal data must be placed on this installation (no encryption, no SEP, no real signature).
+
+---
+
+### 2. Boot chain (from the power button to iOS)
 
 ```
-S-Boot (Samsung) → BootShim → Mu UEFI (beyond1ltePkg) → XnuLoader (EFI) → XNU (kernel Apple) → HFS root dans USERDATA → launchd → SpringBoard
+S-Boot (Samsung) → BootShim → Mu UEFI (beyond1ltePkg) → XnuLoader (EFI) → XNU (Apple kernel) → HFS root in USERDATA → launchd → SpringBoard
 ```
 
-| Maillon | Rôle |
-|---------|------|
-| **S-Boot** | Chargeur d'origine Samsung. Charge la partition `BOOT` (`sda14`). Pas de fastboot. |
-| **BootShim** | Petite couche de transition entre S-Boot et l'UEFI. |
-| **Mu UEFI** | Firmware UEFI basé sur Mu-Silicium (EDK II), adapté au S10 par un *overlay* (`beyond1ltePkg`). Gère l'écran, l'UFS, l'ACPI, le tactile. |
-| **XnuLoader** | Application EFI embarquée qui lit XNU depuis la partition BOOT, construit les `boot_args` et l'arbre de périphériques Apple, puis passe la main à XNU. |
-| **XNU** | Noyau Apple open-source (version `rel/xnu-12377`), patché pour le board B2L (Exynos 9820, arm64e sans PAC hardware). |
-| **HFS root** | Système de fichiers iOS (HFS+ journalisé, pas APFS natif) installé dans `USERDATA` (`sda34`). |
-| **launchd / SpringBoard** | Userspace iOS : lance les services et l'interface graphique. |
+| Link | Role |
+|------|------|
+| **S-Boot** | Original Samsung loader. Loads the `BOOT` partition (`sda14`). No fastboot. |
+| **BootShim** | Small transition layer between S-Boot and the UEFI. |
+| **Mu UEFI** | UEFI firmware based on Mu-Silicium (EDK II), adapted to the S10 by an *overlay* (`beyond1ltePkg`). Handles the display, UFS, ACPI, touch. |
+| **XnuLoader** | Embedded EFI application that reads XNU from the BOOT partition, builds the `boot_args` and the Apple device tree, then hands control to XNU. |
+| **XNU** | Apple's open-source kernel (version `rel/xnu-12377`), patched for the B2L board (Exynos 9820, arm64e without hardware PAC). |
+| **HFS root** | iOS file system (journaled HFS+, not native APFS) installed in `USERDATA` (`sda34`). |
+| **launchd / SpringBoard** | iOS userspace: starts the services and the graphical interface. |
 
 ---
 
-### 3. État actuel au 2026-11-10 (build 0139)
+### 3. Current status as of 2026-11-10 (build 0139)
 
-D'après `engineer.md`, `metal-progress.md` et les journaux 0136-0139 :
+From `engineer.md`, `metal-progress.md` and the logs 0136-0139:
 
-**Ce qui fonctionne :**
-- Boot vérifié sur le S10 : texte XNU visible, 8/8 CPU initialisés (4×A55, 2×A75, 2×M4), timers et interruptions OK.
-- UFS natif : lecture/écriture directe depuis XNU.
-- Racine HFS : montée en lecture/écriture, journal replay OK.
-- Userspace iOS 26 : lance, SpringBoard apparaît, écran de verrouillage et tactile fonctionnent.
-- Réglages : s'ouvrent (depuis build 0099 sur S10+, en stabilisation sur S10).
-- Écran d'accueil, centre de contrôle, contacts, clavier s'affichent (rendu GPU Metal).
-- Liquid Glass (flous, verre) rendu sur le bouton Focus du centre de contrôle (build 0127-0128).
-- Rendu GPU Metal actif : backboardd dessine sur le Mali-G76 via le pont Metal → libhakiosmetal → Mesa panfrost → Bifrost → Mali.
-- Throttle thermique CPU : la puce plafonne à ~62-66 °C au lieu de 76 °C (build 0030).
-- GPU : DVFS à 676 MHz par ACPM (build 0030), premier job GPU exécuté (build 0017), service HakiosMali démarré (build 0029).
-- Fréquences CPU relevées après DVFS : A55 1846, A75 2210, M4 2080 MHz (build 0015).
+**What works:**
+- Boot verified on the S10: XNU text visible, 8/8 CPUs initialized (4×A55, 2×A75, 2×M4), timers and interrupts OK.
+- Native UFS: read/write directly from XNU.
+- HFS root: mounted read/write, journal replay OK.
+- iOS 26 userspace: starts, SpringBoard appears, lock screen and touch work.
+- Settings: open (since build 0099 on S10+, being stabilized on S10).
+- Home screen, control center, contacts, keyboard display (Metal GPU rendering).
+- Liquid Glass (blur, glass) rendered on the Focus button of the control center (builds 0127-0128).
+- Metal GPU rendering active: backboardd draws on the Mali-G76 via the Metal bridge → libhakiosmetal → Mesa panfrost → Bifrost → Mali.
+- CPU thermal throttling: the chip caps at ~62-66 °C instead of 76 °C (build 0030).
+- GPU: DVFS at 676 MHz via ACPM (build 0030), first GPU job executed (build 0017), HakiosMali service started (build 0029).
+- CPU frequencies read after DVFS: A55 1846, A75 2210, M4 2080 MHz (build 0015).
 
-**Ce qui ne fonctionne pas encore :**
-- Glyphes des boutons ronds du centre de contrôle (lampe, minuteur, calculatrice, appareil photo, enregistrement), lune de Concentration, glyphe du curseur de volume.
-- Icône Horloge : aiguilles présentes, chiffres du cadran absents.
-- Icône Calendrier : entièrement vide.
-- Widgets de l'écran d'accueil : rectangles blancs sans contenu.
-- Dock qui clignote parfois.
-- Un glyphe en haut à gauche s'affiche en hachures (mauvaise largeur de ligne).
-- apps non installées (blocage HFS/APFS, erreur 166).
-- Pas de Wi-Fi, Bluetooth, audio, cellulaire, caméra, veille.
-- Le chemin Metal ne consomme pas les surfaces `240x240 LA08` des instantanés d'icône vivant (Calendar, Timer) — diagnostic en cours (builds 0136-0139).
+**What does not work yet:**
+- Glyphs of the round buttons in the control center (flashlight, timer, calculator, camera, record), the Concentration moon, the volume slider glyph.
+- Clock icon: hands present, dial numerals missing.
+- Calendar icon: completely empty.
+- Home screen widgets: white rectangles with no content.
+- Dock that sometimes flickers.
+- A glyph at the top left is displayed with hatching (wrong line width).
+- Apps not installed (HFS/APFS block, error 166).
+- No Wi-Fi, Bluetooth, audio, cellular, camera, sleep.
+- The Metal path does not consume the `240x240 LA08` surfaces of the live icon snapshots (Calendar, Timer) — diagnosis in progress (builds 0136-0139).
 
-**Build en cours :** B1L-0139, ensemble `b2l-metal-v88` (instrumentation userspace pour tracer la consommation des textures 240×240 par le chemin Metal). Résultat en attente.
+**Build in progress:** B1L-0139, set `b2l-metal-v88` (userspace instrumentation to trace the consumption of 240×240 textures by the Metal path). Result pending.
 
 ---
 
-### 4. Arborescence des dossiers
+### 4. Directory layout
 
-#### Dossier de travail principal : `~/Developer/s10-port/`
+#### Main working folder: `~/Developer/s10-port/`
 
-| Dossier | Rôle |
+| Folder | Role |
 |---------|------|
-| `beyond2lte-ios/` | Cœur du projet : patches XNU, loader EFI, scripts de build/packaging, tooling iOS. Branche locale `b1l` (adaptation S10). |
-| `beyond2lte-uefi/` | Overlay UEFI pour le S10+ (référence). Contient `beyond2ltePkg`, `yap.sh`. |
-| `uefi-touch-42412d0/` | Autre copie de l'overlay UEFI (branche touch, commit 42412d0), protocoles tactile et diagnostic attendus par le loader. |
-| `Mu-Silicium/` | Base firmware EDK II / Mu (commit `a8ca6f0d`, Mu Basecore `762a65d`). |
-| `mu-work-b1l-touch/` | Arbre de travail Mu jetable pour construire le firmware S10 (beyond1lte). |
-| `mu-work-b1l/` | Arbre de travail Mu précédent. |
-| `device-s10/` | Données du téléphone réel : DTB (`base.dtb`, `merged.dtb`, `rev26.dtbo`), dumps TWRP, sauvegardes de partitions (efs, boot, vbmeta, etc.). |
-| `b1l-tools/` | Scripts d'installation, flash, construction de la racine iOS, cache natif, traduction arm64e. |
-| `build-gl/` | Pont OpenGL ES / OSMesa (référence S7, plusieurs versions). |
-| `build-mesa/` | Builds Mesa (Panfrost pour Mali). |
-| `build-metal/` | Builds Metal → Vulkan (dada / scion). |
-| `deps/` / `deps-src/` | Dépendances de build (KDK, SDK, bibliothèques). |
-| `progress/` | Fichiers de statut de build (un `.status` par build NN, un `current` pointant sur le dernier). |
-| `saved-builds/` | Builds conservés (ex: `0128/`). |
-| `static-work/` | Travail de traduction arm64e statique (fichiers `orig/`, `out/`, comparaisons). |
-| `tools-src/` | Outils supplémentaires (macOS UnifiedLogs). |
-| `*.log` / `run-*.sh` / `flash-*.log` | Journaux de builds et flashs passés, scripts d'exécution historiques. |
+| `beyond2lte-ios/` | Core of the project: XNU patches, EFI loader, build/packaging scripts, iOS tooling. Local branch `b1l` (S10 adaptation). |
+| `beyond2lte-uefi/` | UEFI overlay for the S10+ (reference). Contains `beyond2ltePkg`, `yap.sh`. |
+| `uefi-touch-42412d0/` | Another copy of the UEFI overlay (touch branch, commit 42412d0), touch protocols and diagnostics expected by the loader. |
+| `Mu-Silicium/` | EDK II / Mu firmware base (commit `a8ca6f0d`, Mu Basecore `762a65d`). |
+| `mu-work-b1l-touch/` | Disposable Mu working tree to build the S10 firmware (beyond1lte). |
+| `mu-work-b1l/` | Previous Mu working tree. |
+| `device-s10/` | Real phone data: DTB (`base.dtb`, `merged.dtb`, `rev26.dtbo`), TWRP dumps, partition backups (efs, boot, vbmeta, etc.). |
+| `b1l-tools/` | Install scripts, flashing, iOS root construction, native cache, arm64e translation. |
+| `build-gl/` | OpenGL ES / OSMesa bridge (S7 reference, several versions). |
+| `build-mesa/` | Mesa builds (Panfrost for Mali). |
+| `build-metal/` | Metal → Vulkan builds (dada / scion). |
+| `deps/` / `deps-src/` | Build dependencies (KDK, SDK, libraries). |
+| `progress/` | Build status files (one `.status` per build NN, a `current` pointing to the latest). |
+| `saved-builds/` | Kept builds (e.g. `0128/`). |
+| `static-work/` | Static arm64e translation work (`orig/`, `out/` files, comparisons). |
+| `tools-src/` | Additional tools (macOS UnifiedLogs). |
+| `*.log` / `run-*.sh` / `flash-*.log` | Logs of past builds and flashes, historical run scripts. |
 
-#### Dossier de documentation et planification : `~/Port iOS 26 to S10/`
+#### Documentation and planning folder: `~/Port iOS 26 to S10/`
 
-| Fichier / dossier | Rôle |
+| File / folder | Role |
 |-------------------|------|
-| `PLAN.md` | Plan complet du port : stratégie, phases 0-7, récupération de l'iOS 26, matériel, risques, vérification. |
-| `engineer.md` | Brief d'ingénieur : cible, état actuel, politique de stockage, environnement de build, workflow, priorités, diagnostics. |
-| `gpu.md` | Plan d'accélération GPU Mali-G76 (étapes G0-G7). |
-| `docs/` | Journaux de build détaillés (`build-b1l-XXXX.md`), captures d'écran, plans GPU, plan de phase 4, faits mesurés du S10 (`docs/device-facts.md`), référence GPU S7 (`docs/gpu/herolte-reference.md`). |
-| `DOCUMENTATION_PROJET_PART{1,2,3}.md` | Ce document (présentation, build, sécurité, journaux, GPU, référence). |
+| `PLAN.md` | Full port plan: strategy, phases 0-7, recovery of iOS 26, hardware, risks, verification. |
+| `engineer.md` | Engineer brief: target, current status, storage policy, build environment, workflow, priorities, diagnostics. |
+| `gpu.md` | Mali-G76 GPU acceleration plan (steps G0-G7). |
+| `docs/` | Detailed build logs (`build-b1l-XXXX.md`), screenshots, GPU plans, phase 4 plan, measured S10 facts (`docs/device-facts.md`), S7 GPU reference (`docs/gpu/herolte-reference.md`). |
+| `DOCUMENTATION_PROJET_PART{1,2,3}.md` | This document (overview, build, security, logs, GPU, reference). |
 
 ---
 
-### 5. Rôle des différents scripts
+### 5. Role of the various scripts
 
-#### Dans `beyond2lte-ios/scripts/` (build et tooling)
+#### In `beyond2lte-ios/scripts/` (build and tooling)
 
-| Script | Rôle |
+| Script | Role |
 |--------|------|
-| `build-kernel.sh` | Compile le noyau XNU (target `DEVELOPMENT ARM64 B2L`, SDK iPhoneOS 26.5). Vérifie la révision XNU (`ac9718fb…`), intègre libpthread/BearSSL/HFS, lance `make`. Nécessite `KDKROOT` et `B2L_DEPSROOT`. |
-| `build-boot-firmware.sh` | Construit le firmware UEFI (Mu-Silicium) pour un board donné (`B2L_BOARD`). |
-| `build-efi.sh` | Construit les applications EFI standalone. |
-| `build-mesa.sh` | Cross-compile Mesa (Panfrost) pour iOS arm64. |
-| `build-metal.sh` / `build-metal-scion.sh` | Construit les bibliothèques Metal et le pont Air (scion). |
-| `build-userspace-bootstrap.py` | Génère le payload userspace à partir de la racine iOS. |
-| `prepare-xnu.sh` | Prépare les sources XNU (applique l'overlay B2L). |
-| `fetch-xnu.sh` | Récupère les sources XNU épinglées. |
-| `package-boot.py` | Empaquette le `boot.img` Android v1 (firmware UEFI + noyau XNU + loader + trailer). Vérifie l'en-tête, le trailer `B2LXNU02`, la graine 256 octets. |
-| `make-board-platform.py` | Dérive le platform package `beyond1ltePkg` de l'overlay S10+. |
-| `prepare-boot-firmware.py` | Prépare le firmware de boot. |
-| `b2l_board.py` | Table des cartes, identité par `ro.boot.em.model`. |
-| `test-loader.sh` | Teste le loader EFI sur l'hôte. |
-| `test-macho.sh` | Teste les fichiers Mach-O. |
-| `test-arm64e.sh` | Teste l'émulation arm64e. |
-| `test-native-cache.sh` | Teste le cache de code natif. |
-| `test-ufs-transport.sh` | Teste le transport UFS. |
-| `pull-b2l-log.py` | Récupère le journal noyau depuis TWRP. |
-| `pull-b2l-unified-logs.py` | Récupère les journaux unifiés iOS (tracev3) et rapports de crash `.ips`. |
-| `inspect-kernel.sh` | Inspecte un noyau XNU (symboles, sections). |
-| `apply-board-patches.py` | Applique les patches spécifiques au board. |
-| `decode-b2l-diag.py` | Décode les diagnostics B2L. |
-| `stage-libpthread.py` / `stage-bearssl.py` / `stage-hfs.py` | Intègre libpthread, BearSSL et le pilote HFS dans XNU. |
-| `extract-b2lmod.py` | Extrait les modules B2L. |
-| `grow-native-cache.py` / `init-native-cache.py` | Gère le cache de code natif. |
-| `check-native-cache-codegen.py` | Vérifie la génération du cache natif. |
-| `audit-kernel-rcpc.py` | Audite le noyau. |
-| `build-air-host.sh` | Construit l'hôte Air. |
-| `build-firehose.sh` | Construit le protocole Firehose (non utilisé ici). |
-| `build-springboard-dylib.py` | Construit une dylib SpringBoard. |
-| `stage-hfs.py` | Stage le pilote HFS. |
-| `unsign-branches.py` | Dés-signe les branches. |
+| `build-kernel.sh` | Compiles the XNU kernel (target `DEVELOPMENT ARM64 B2L`, SDK iPhoneOS 26.5). Checks the XNU revision (`ac9718fb…`), integrates libpthread/BearSSL/HFS, runs `make`. Requires `KDKROOT` and `B2L_DEPSROOT`. |
+| `build-boot-firmware.sh` | Builds the UEFI firmware (Mu-Silicium) for a given board (`B2L_BOARD`). |
+| `build-efi.sh` | Builds the standalone EFI applications. |
+| `build-mesa.sh` | Cross-compiles Mesa (Panfrost) for iOS arm64. |
+| `build-metal.sh` / `build-metal-scion.sh` | Builds the Metal libraries and the Air bridge (scion). |
+| `build-userspace-bootstrap.py` | Generates the userspace payload from the iOS root. |
+| `prepare-xnu.sh` | Prepares the XNU sources (applies the B2L overlay). |
+| `fetch-xnu.sh` | Fetches the pinned XNU sources. |
+| `package-boot.py` | Packages the Android v1 `boot.img` (UEFI firmware + XNU kernel + loader + trailer). Checks the header, the `B2LXNU02` trailer, the 256-byte seed. |
+| `make-board-platform.py` | Derives the `beyond1ltePkg` platform package from the S10+ overlay. |
+| `prepare-boot-firmware.py` | Prepares the boot firmware. |
+| `b2l_board.py` | Board table, identity by `ro.boot.em.model`. |
+| `test-loader.sh` | Tests the EFI loader on the host. |
+| `test-macho.sh` | Tests Mach-O files. |
+| `test-arm64e.sh` | Tests arm64e emulation. |
+| `test-native-cache.sh` | Tests the native code cache. |
+| `test-ufs-transport.sh` | Tests UFS transport. |
+| `pull-b2l-log.py` | Retrieves the kernel log from TWRP. |
+| `pull-b2l-unified-logs.py` | Retrieves iOS unified logs (tracev3) and `.ips` crash reports. |
+| `inspect-kernel.sh` | Inspects an XNU kernel (symbols, sections). |
+| `apply-board-patches.py` | Applies board-specific patches. |
+| `decode-b2l-diag.py` | Decodes B2L diagnostics. |
+| `stage-libpthread.py` / `stage-bearssl.py` / `stage-hfs.py` | Integrates libpthread, BearSSL and the HFS driver into XNU. |
+| `extract-b2lmod.py` | Extracts B2L modules. |
+| `grow-native-cache.py` / `init-native-cache.py` | Manages the native code cache. |
+| `check-native-cache-codegen.py` | Checks native cache code generation. |
+| `audit-kernel-rcpc.py` | Audits the kernel. |
+| `build-air-host.sh` | Builds the Air host. |
+| `build-firehose.sh` | Builds the Firehose protocol (not used here). |
+| `build-springboard-dylib.py` | Builds a SpringBoard dylib. |
+| `stage-hfs.py` | Stages the HFS driver. |
+| `unsign-branches.py` | Removes signatures from branches. |
 
-#### Dans `b1l-tools/` (installation, flash, racine iOS)
+#### In `b1l-tools/` (install, flash, iOS root)
 
-| Script | Rôle |
+| Script | Role |
 |--------|------|
-| `b1l-build.sh NNNN SET [--mesa] [--no-libs] [--no-kernel]` | Chaîne complète d'un build Metal : mesa → libs → kernel → package → system → boot. Écrit un fichier de statut (`progress/NNNN.status`) lisible par `watch-build.sh`. |
-| `flash-boot.sh IMAGE SHA256` | Écriture gardée de la partition BOOT (`sda14`) avec readback et vérification SHA-256. Vérifie TWRP, root, modèle SM-G973F, bloc et non-montage. |
-| `flash-chunked.sh IMAGE NAME BLOCK BYTES` | Écrit une grande image (USERDATA, SYSTEM) en chunks de 512 Mio vérifiés, résumable (skip si déjà écrit). |
-| `flash-delta.sh` / `flash-saved.sh` | Variantes de flash delta / sauvegardes. |
-| `hash-device.sh` | Calcule/vérifie les hash des partitions du téléphone. |
-| `build-ios-root.sh` | Construit l'image racine iOS (HFS+) à partir de l'IPSW. Nécessite sudo. |
-| `build-system-image.sh` | Construit l'image SYSTEM (contient le cache natif + journal). |
-| `set-root-prefs.sh <profile>` | Définit les préférences de racine (ex: `BKNoWatchdogs`). |
-| `install-translated-cache.sh` | Installe le cache de code traduit. |
-| `set-launchd-env.sh` | Configure l'environnement launchd. |
-| `system-add-fast.sh` / `system-add-gl.sh` | Ajoute des fichiers à l'image SYSTEM (chunks modifiés uniquement). |
-| `pull-chunked.sh` | Récupère une image depuis le téléphone par chunks (pour sauvegarde / rollback). |
-| `system-pull-changed.sh` | Récupère uniquement les chunks modifiés. |
-| `copy-tree.py` / `dt-table.py` / `dts-nodes.py` / `fdt2json.py` | Outils de manipulation d'arbres de fichiers et de DTB. |
-| `aea-key.py` | Gestion des clés AEA (images iOS chiffrées). |
-| `install-availability.sh` | Installation des frameworks de disponibilité. |
-| `install-b1l-0011-root.sh` … `install-b1l-0018-native-apps.sh` | Scripts d'installation historiques par build. |
-| `watch-build.sh` / `watch-flash.sh` / `watch-progress.sh` / `watch-system-flash.sh` | Affichage en direct de l'avancement des builds/flashs. |
+| `b1l-build.sh NNNN SET [--mesa] [--no-libs] [--no-kernel]` | Full chain for a Metal build: mesa → libs → kernel → package → system → boot. Writes a status file (`progress/NNNN.status`) readable by `watch-build.sh`. |
+| `flash-boot.sh IMAGE SHA256` | Guarded write of the BOOT partition (`sda14`) with readback and SHA-256 verification. Checks TWRP, root, SM-G973F model, block device and non-mounted state. |
+| `flash-chunked.sh IMAGE NAME BLOCK BYTES` | Writes a large image (USERDATA, SYSTEM) in verified 512 MiB chunks, resumable (skips what is already written). |
+| `flash-delta.sh` / `flash-saved.sh` | Delta flash / saved-image flash variants. |
+| `hash-device.sh` | Computes/verifies the hashes of the phone's partitions. |
+| `build-ios-root.sh` | Builds the iOS root image (HFS+) from the IPSW. Requires sudo. |
+| `build-system-image.sh` | Builds the SYSTEM image (contains the native cache + journal). |
+| `set-root-prefs.sh <profile>` | Sets root preferences (e.g. `BKNoWatchdogs`). |
+| `install-translated-cache.sh` | Installs the translated code cache. |
+| `set-launchd-env.sh` | Configures the launchd environment. |
+| `system-add-fast.sh` / `system-add-gl.sh` | Adds files to the SYSTEM image (modified chunks only). |
+| `pull-chunked.sh` | Retrieves an image from the phone in chunks (for backup / rollback). |
+| `system-pull-changed.sh` | Retrieves only the modified chunks. |
+| `copy-tree.py` / `dt-table.py` / `dts-nodes.py` / `fdt2json.py` | Tools for handling file trees and DTBs. |
+| `aea-key.py` | AEA key handling (encrypted iOS images). |
+| `install-availability.sh` | Installs the availability frameworks. |
+| `install-b1l-0011-root.sh` … `install-b1l-0018-native-apps.sh` | Historical install scripts, one per build. |
+| `watch-build.sh` / `watch-flash.sh` / `watch-progress.sh` / `watch-system-flash.sh` | Live display of build/flash progress. |
 
-#### Scripts d'exécution historiques (`run-*.sh` à la racine de `s10-port/`)
+#### Historical run scripts (`run-*.sh` at the root of `s10-port/`)
 
-Ce sont des scripts d'exécution passés (builds 0069 à 0081 et au-delà), chacun exécutant une séquence : build noyau → package → flash SYSTEM → flash BOOT. Exemple `run-0081.sh` :
-1. Copie les headers graphiques dans XNU
-2. Construit le noyau avec `build-kernel.sh`
-3. Empaquette `boot.img` avec `package-boot.py`
-4. Ajoute le système avec `system-add-fast.sh`
-5. Flashe BOOT avec `flash-boot.sh`
+These are past run scripts (builds 0069 to 0081 and beyond), each running a sequence: kernel build → package → SYSTEM flash → BOOT flash. Example `run-0081.sh`:
+1. Copies the graphics headers into XNU
+2. Builds the kernel with `build-kernel.sh`
+3. Packages `boot.img` with `package-boot.py`
+4. Adds the system with `system-add-fast.sh`
+5. Flashes BOOT with `flash-boot.sh`
 
 ---
 
-### 6. Règle d'or du projet
+### 6. The project's golden rule
 
-> **Une seule modification par build de test. Chaque build a son journal `docs/journal/build-b1l-XXXX.md`. « Verified » signifie observé sur le S10.** Ne jamais revendiquer un résultat qui n'a pas été observé sur l'appareil.
+> **One single change per test build. Each build has its log `docs/journal/build-b1l-XXXX.md`. "Verified" means observed on the S10.** Never claim a result that has not been observed on the device.
 
-La partie 2 couvre l'environnement de build, le processus de build pas à pas, et la politique de sécurité/stockage.
+Part 2 covers the build environment, the step-by-step build process, and the security/storage policy.

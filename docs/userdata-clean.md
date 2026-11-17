@@ -1,93 +1,92 @@
-# Nouveau USERDATA propre (B1L-0250, préparé le 2026-11-15)
+# New clean USERDATA (B1L-0250, prepared 2026-11-15)
 
-Demande du propriétaire : refaire un USERDATA plus propre, en suivant ios-pipa. Le nôtre date du 3 novembre et a
-accumulé des réglages posés après coup, dont certains ont échoué (ExtensionKit en 0249).
+Owner's request: rebuild a cleaner USERDATA, following ios-pipa. Ours dates from 3 November and has
+accumulated settings applied after the fact, some of which failed (ExtensionKit in 0249).
 
-## Ce qui change dans la préparation
+## What changes in the preparation
 
-`beyond2lte-ios/scripts/prepare-ios-root.py` pose maintenant, **avant le premier démarrage**, des réglages repris
-d'ios-pipa. Source : github.com/nishant713/ios-pipa, `tools/pipa-root-tweaks.py`, commit `830ec1c`, licence MIT
+`beyond2lte-ios/scripts/prepare-ios-root.py` now applies, **before the first boot**, settings taken from
+ios-pipa. Source: github.com/nishant713/ios-pipa, `tools/pipa-root-tweaks.py`, commit `830ec1c`, MIT license
 (Copyright (c) 2026 Leo Malik, dipa-studio).
 
-| Réglage | Pourquoi |
+| Setting | Why |
 |---|---|
-| ExtensionKit `enforce_xpc_cache_code_signing` désactivé (`/private/var/preferences/FeatureFlags/Domain/ExtensionKit.plist`) | sinon iOS refuse toutes les extensions d'apps (widgets, fonds d'écran) ; dossiers au nom de mobile, comme iOS les crée |
-| `disabled.plist` de launchd : `com.apple.fairplayd.H2` et `com.apple.bluetoothd` désactivés | ils redémarrent sans cesse et bloquaient le scan des apps de LaunchServices chez ios-pipa ; **retirer bluetoothd quand le Bluetooth reprend** |
-| `launchd.plist` : `_PanicOnCrash` renommé `_PanicOnCrasX` | un démon qui plante ne fait plus paniquer le téléphone (ici une panique ressemble à un gel total) |
-| SpringBoard : `BKNoWatchdogs`, exception de chien de garde pour purplebuddy | une app lente n'est plus tuée |
-| `ByHost/com.apple.migration.<UUID>.plist` (`LastSystemVersion`) | sinon la migration de données peut se relancer à chaque démarrage ; UUID fixe de `B2LPlatformExpert.cpp` (B1L-0161) |
+| ExtensionKit `enforce_xpc_cache_code_signing` disabled (`/private/var/preferences/FeatureFlags/Domain/ExtensionKit.plist`) | otherwise iOS refuses all app extensions (widgets, wallpapers); folders named after mobile, as iOS creates them |
+| launchd `disabled.plist`: `com.apple.fairplayd.H2` and `com.apple.bluetoothd` disabled | they kept restarting and blocked LaunchServices app scanning on ios-pipa; **remove bluetoothd when Bluetooth returns** |
+| `launchd.plist`: `_PanicOnCrash` renamed `_PanicOnCrasX` | a crashing daemon no longer panics the phone (here a panic looks like a total freeze) |
+| SpringBoard: `BKNoWatchdogs`, watchdog exception for purplebuddy | a slow app is no longer killed |
+| `ByHost/com.apple.migration.<UUID>.plist` (`LastSystemVersion`) | otherwise data migration can rerun at every boot; fixed UUID from `B2LPlatformExpert.cpp` (B1L-0161) |
 
-Déjà présents avant : Setup sauté, migration (fichier simple), conteneurs, journaux, liens des cryptex.
+Already present before: Setup skipped, migration (simple file), containers, logs, cryptex links.
 
-**Laissés de côté volontairement :**
-- les réglages CoreAnimation d'ios-pipa (deep framebuffer, compression) : c'est à la session Metal de décider ;
-- le retrait de CommCenter et de l'enregistreur MediaToolbox : non observés comme problème ici ;
-- le déplacement des apps vers `/Applications` : le noyau le fait déjà avant launchd (`b2l_apps_layout.h`, B1L-0024/0025).
+**Deliberately left out:**
+- ios-pipa's CoreAnimation settings (deep framebuffer, compression): up to the Metal session to decide;
+- removing CommCenter and the MediaToolbox logger: not observed as a problem here;
+- moving apps to `/Applications`: the kernel already does it before launchd (`b2l_apps_layout.h`, B1L-0024/0025).
 
-Testé sur une fausse racine : `--dry-run`, application, puis `--verify`. **Pas encore testé sur une vraie image.**
+Tested on a fake root: `--dry-run`, application, then `--verify`. **Not yet tested on a real image.**
 
-`b1l-tools/build-ios-root.sh` ne refuse plus de tourner quand une image existe. Il la renomme
-`ios26-userdata.hfs.img.before-<date>`, sans rien supprimer.
+`b1l-tools/build-ios-root.sh` no longer refuses to run when an image exists. It renames it
+`ios26-userdata.hfs.img.before-<date>`, without deleting anything.
 
-## Étapes
+## Steps
 
-1. **Le propriétaire lance** (sudo, que l'assistant n'a pas) :
+1. **The owner runs it** (sudo, which the assistant does not have):
    ```bash
    sudo bash ~/Developer/s10-port/b1l-tools/build-ios-root.sh
    ```
-   Durée : 30 à 40 minutes environ. Résultat : `beyond2lte-ios/out/ipsw/ios26-userdata.hfs.img`, 32 Gio. Il y a 206 Go
-   libres.
-2. L'assistant vérifie l'image (`--verify`, `fsck_hfs`, hash), puis demande l'accord du propriétaire pour écrire USERDATA
-   (`flash-delta.sh`). La session Metal doit libérer le téléphone.
-3. Premier démarrage : long (bases LaunchServices, icônes). Il faut retaper le mot de passe Wi-Fi.
+   Duration: about 30 to 40 minutes. Result: `beyond2lte-ios/out/ipsw/ios26-userdata.hfs.img`, 32 GiB. There are 206 GB
+   free.
+2. The assistant checks the image (`--verify`, `fsck_hfs`, hash), then asks the owner's agreement to write USERDATA
+   (`flash-delta.sh`). The Metal session must release the phone.
+3. First boot: long (LaunchServices databases, icons). The Wi-Fi password must be typed again.
 
-## Ce qui reste
+## What remains
 
-- **Gardé :** nos bibliothèques GPU (recopiées depuis SYSTEM par le noyau au démarrage) et le cache natif (sur SYSTEM).
-- **Perdu :** le mot de passe Wi-Fi et les données des apps.
+- **Kept:** our GPU libraries (copied from SYSTEM by the kernel at boot) and the native cache (on SYSTEM).
+- **Lost:** the Wi-Fi password and app data.
 
-## Traduction PAC (ajoutée le 2026-11-15)
+## PAC translation (added 2026-11-15)
 
-Notre ancienne racine avait reçu après coup la traduction PAC, avec `install-b1l-0011-root.sh` et `0012`. Sans elle,
-chaque instruction PAC du système piège, et le téléphone serait extrêmement lent. `build-ios-root.sh` la refait
-maintenant lui-même (étape 5b) :
-- **Cache partagé.** `static-work/out-0250` a été régénéré le 2026-11-15 depuis `static-work/orig`, avec le même
-  `nc-static` que 0012 (`apply` puis les deux `nop-call` MediaServices de 0011). Résultat : **41 502 070 mots**, comme
-  `apply3.txt` de 0012. `compare` contre l'original sur les 84 fichiers donne 0 changement inattendu, sauf les deux NOP
-  voulus dans `.15` (`static-work/compare-0250.txt`).
+Our old root had received the PAC translation after the fact, with `install-b1l-0011-root.sh` and `0012`. Without it,
+every PAC instruction in the system traps, and the phone would be extremely slow. `build-ios-root.sh` now redoes it
+itself (step 5b):
+- **Shared cache.** `static-work/out-0250` was regenerated on 2026-11-15 from `static-work/orig`, with the same
+  `nc-static` as 0012 (`apply`, then the two `nop-call` MediaServices from 0011). Result: **41,502,070 words**, like
+  `apply3.txt` from 0012. `compare` against the original on the 84 files gives 0 unexpected changes, except the two NOPs
+  intended in `.15` (`static-work/compare-0250.txt`).
 
-  Attention : `static-work/out` est une traduction plus ancienne (4 nov. 13:39, sans PACGA v2, sans îlots de stubs,
-  sans les NOP). Ce n'est **pas** la version du téléphone, contrairement à ce que disait `menage-disque.md`.
-- **Écriture dans l'image.** Elle se fait sur place : même taille, inode et propriétaire. Le script vérifie d'abord que
-  chaque fichier de l'image est bien le cache d'origine.
-- **Programmes hors cache.** `nc-static macho-apply` traduit les programmes hors cache, comme en 0011, et aussi les
-  50 apps de `/private/var/staged_system_apps`, que le noyau déplace ensuite vers `/Applications` (comme en 0018).
-  Un contrôle final vérifie qu'il ne reste aucun mot à convertir.
+  Warning: `static-work/out` is an older translation (4 Nov 13:39, without PACGA v2, without stub islands,
+  without the NOPs). It is **not** the phone's version, contrary to what `menage-disque.md` said.
+- **Writing into the image.** It is done in place: same size, inode and owner. The script first checks that
+  each file in the image is indeed the original cache.
+- **Programs outside the cache.** `nc-static macho-apply` translates the programs outside the cache, as in 0011, and also
+  the 50 apps in `/private/var/staged_system_apps`, which the kernel then moves to `/Applications` (as in 0018).
+  A final check verifies that no word left to convert remains.
 
-Revu et sans suite :
-- `set-root-prefs.sh springboard-watchdogs` est déjà couvert par `prepare-ios-root.py` ;
-- `reduce-transparency` n'a jamais été appliqué selon les docs ;
-- les copies d'apps de 0013 ont été annulées par 0018, et le noyau fait le reste (0024/0025).
+Reviewed and dropped:
+- `set-root-prefs.sh springboard-watchdogs` is already covered by `prepare-ios-root.py`;
+- `reduce-transparency` was never applied according to the docs;
+- the app copies from 0013 were cancelled by 0018, and the kernel does the rest (0024/0025).
 
-**Ce qui revient tout seul :** la dictée coupée (0164). Le noyau la patche avant launchd à chaque démarrage, et sa garde
-accepte le cache d'origine comme le cache traduit.
+**What comes back on its own:** the cut dictation (0164). The kernel patches it before launchd at each boot, and its guard
+accepts both the original cache and the translated cache.
 
-## À coordonner
+## To coordinate
 
-Le code noyau de 0249 (`b2l_apps_layout.h`, session Metal) réécrit une fois `disabled.plist` et renomme les bases
-LaunchServices. Sur une racine neuve, il remplacerait notre `disabled.plist` (bluetoothd en moins) : à retirer ou à
-désactiver avant le premier démarrage.
+The kernel code from 0249 (`b2l_apps_layout.h`, Metal session) rewrites `disabled.plist` once and renames the LaunchServices
+databases. On a fresh root, it would replace our `disabled.plist` (one less bluetoothd): to be removed or disabled before the first boot.
 
-**Réglé (session Metal, B1L-0250, BOOT `39be1437…`) :** `b2l_ext_reset` est coupé par défaut et ne revient qu'avec le
-boot-arg `b2l_ext_reset=1`. Le GPU reste ouvert à tous (0248, ensemble `b2l-metal-v118`). La session Metal ne veut pas les
-réglages CoreAnimation d'ios-pipa pour l'instant. Elle n'écrit plus dans USERDATA, et le téléphone est libre, en TWRP.
+**Fixed (Metal session, B1L-0250, BOOT `39be1437…`):** `b2l_ext_reset` is off by default and only comes back with the
+boot-arg `b2l_ext_reset=1`. The GPU stays open to everyone (0248, set `b2l-metal-v118`). The Metal session does not want
+ios-pipa's CoreAnimation settings for now. It no longer writes to USERDATA, and the phone is free, in TWRP.
 
-## Écrit sur le téléphone (2026-11-15)
+## Written to the phone (2026-11-15)
 
-- Image : `beyond2lte-ios/out/ipsw/ios26-userdata.hfs.img`, sha256 `1354515aa4495693f773986dfd90aaa86e4663f070e48a85a009a580fbeace42`.
-  `fsck_hfs` OK ; cache : 84 fichiers traduits ; hors cache : 0 erreur, il ne reste aucun mot à convertir.
-- `flash-delta.sh` vers `userdata` (`/dev/block/sda34`) : 6 578 blocs sur 8 192 écrits en 241 passes, chacun relu sans
-  erreur (journal `out/live/flash-userdata-250.log`). Redémarrage vers le système lancé ensuite.
-- Pas de sauvegarde de l'ancien USERDATA (choix du propriétaire). La dernière copie reste
-  `out/live/ios26-userdata-gpu-248.img` (14 nov.).
-- Le premier démarrage n'a pas encore été observé.
+- Image: `beyond2lte-ios/out/ipsw/ios26-userdata.hfs.img`, sha256 `1354515aa4495693f773986dfd90aaa86e4663f070e48a85a009a580fbeace42`.
+  `fsck_hfs` OK; cache: 84 files translated; outside the cache: 0 errors, no word left to convert.
+- `flash-delta.sh` to `userdata` (`/dev/block/sda34`): 6,578 blocks out of 8,192 written in 241 passes, each read back
+  without error (log `out/live/flash-userdata-250.log`). Reboot to the system started afterwards.
+- No backup of the old USERDATA (owner's choice). The latest copy remains
+  `out/live/ios26-userdata-gpu-248.img` (14 Nov).
+- The first boot has not been observed yet.

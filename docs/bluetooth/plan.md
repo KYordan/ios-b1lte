@@ -1,163 +1,158 @@
-# Bluetooth du S10 : revue de l'existant et plan (2026-11-13)
+# S10 Bluetooth: review of the existing work and plan (2026-11-13)
 
-But : l'interrupteur Bluetooth de Réglages s'allume, la recherche trouve des appareils, l'appairage d'un casque tient
-après un redémarrage et le son passe en A2DP.
+Goal: the Bluetooth toggle in Settings turns on, search finds devices, pairing a headset survives a reboot, and audio switches to A2DP.
 
-## 1. Revue de l'existant
+## 1. Review of the existing work
 
-### Matériel (mesuré dans le DTB live `device-s10/dump/live.dtb` et le noyau Samsung 4.14 `ref-kernel/k9820`)
+### Hardware (measured in the live DTB `device-s10/dump/live.dtb` and the Samsung 4.14 kernel `ref-kernel/k9820`)
 
-| Élément | Valeur | Source |
+| Item | Value | Source |
 | --- | --- | --- |
-| Puce | BCM4375, Bluetooth en UART HCI (H4), Wi-Fi en PCIe | prompt, `bcm43xx.c` |
-| UART | `uart@10840000` (alias `uart1`), USI v2, `samsung,rts-gpio-control`, FIFO 256 o, IRQ 0x198 | DTB live |
-| Broches UART | gpq0-0..3, fonction 2, pull-up (pinctrl@15850000 +0xA0) | DTB live, `pinctrl-exynos-arm64.c` |
-| BT_EN | gpm8-0, sortie (pinctrl@15C30000 +0x100) | DTB `/bluetooth gpios[0]` |
-| BT_WAKE | gpg2-0, sortie (pinctrl@10430000 +0xC0) | `gpios[1]` |
-| HOST_WAKE | gpa2-3, entrée, pull-down, front montant (pinctrl@15850000 +0x40) | `gpios[2]` |
-| Horloge | CMU_PERIC1 0x10800000 : mux `UART_BT_USER` +0x1c0 (bit 4 : 0 = OSCCLK 26 MHz), div +0x1814, portes +0x2020/+0x2098/+0x209c, QCH +0x3038 | `cmucal-sfr.c` |
-| Mise sous tension | BT_WAKE=1, BT_EN=1, 100 ms ; arrêt : BT_EN=0 | `bcm43xx_bt_rfkill_set_power` |
-| Micrologiciel | `bcm4375B0_semco.hcd`, `B0_murata`, `B1_semco`, `B1_semco_sem`, `B1_murata` déjà copiés (hors git) dans `device-s10/wifi-bt-fw/vendor-firmware/` | extraction Wi-Fi |
+| Chip | BCM4375, Bluetooth over UART HCI (H4), Wi-Fi over PCIe | prompt, `bcm43xx.c` |
+| UART | `uart@10840000` (alias `uart1`), USI v2, `samsung,rts-gpio-control`, 256 B FIFO, IRQ 0x198 | live DTB |
+| UART pins | gpq0-0..3, function 2, pull-up (pinctrl@15850000 +0xA0) | live DTB, `pinctrl-exynos-arm64.c` |
+| BT_EN | gpm8-0, output (pinctrl@15C30000 +0x100) | DTB `/bluetooth gpios[0]` |
+| BT_WAKE | gpg2-0, output (pinctrl@10430000 +0xC0) | `gpios[1]` |
+| HOST_WAKE | gpa2-3, input, pull-down, rising edge (pinctrl@15850000 +0x40) | `gpios[2]` |
+| Clock | CMU_PERIC1 0x10800000: `UART_BT_USER` mux +0x1c0 (bit 4: 0 = OSCCLK 26 MHz), divider +0x1814, gates +0x2020/+0x2098/+0x209c, QCH +0x3038 | `cmucal-sfr.c` |
+| Power-up | BT_WAKE=1, BT_EN=1, 100 ms; power-down: BT_EN=0 | `bcm43xx_bt_rfkill_set_power` |
+| Firmware | `bcm4375B0_semco.hcd`, `B0_murata`, `B1_semco`, `B1_semco_sem`, `B1_murata` already copied (outside git) into `device-s10/wifi-bt-fw/vendor-firmware/` | Wi-Fi extraction |
 
-Le choix du `.hcd` dépend de la révision de la puce (B0/B1) et du module (Semco/Murata) : la session Wi-Fi a lu
-la révision (`B2L_WIFI_EP_ID`, OTP/CIS) ; à confirmer avant l'étape 3.
+The choice of `.hcd` depends on the chip revision (B0/B1) and the module (Semco/Murata). The Wi-Fi session read
+the revision (`B2L_WIFI_EP_ID`, OTP/CIS); to be confirmed before step 3.
 
-### Ce que le port a déjà
-- `B2LPlatformExpert.cpp` publie `mac-address-bluetooth0` (synthétique).
-- `B2LWifi.cpp` : modèle à suivre (service IOKit sur IOResources, fil noyau, journal `b2l_diag_record`,
-  micrologiciel lu depuis SYSTEM par `b2l_userspace_seed.h`). Rien pour le Bluetooth, aucun accès à CMU_PERIC1 ni à l'UART.
-- Personne d'autre ne touche gpq0, gpm8, gpg2 ni gpa2 (B2LInput et B2LWifi utilisent d'autres bancs du même bloc).
-- Attention : `B2L BT` dans le journal = pile d'appel noyau. Le Bluetooth journalise en `B2L BLUETOOTH`.
+### What the port already has
+- `B2LPlatformExpert.cpp` publishes `mac-address-bluetooth0` (synthetic).
+- `B2LWifi.cpp`: the model to follow (IOKit service on IOResources, kernel thread, `b2l_diag_record` log,
+  firmware read from SYSTEM by `b2l_userspace_seed.h`). Nothing for Bluetooth, no access to CMU_PERIC1 or the UART.
+- Nobody else touches gpq0, gpm8, gpg2 or gpa2 (B2LInput and B2LWifi use other banks of the same block).
+- Warning: `B2L BT` in the log = kernel call stack. Bluetooth logs as `B2L BLUETOOTH`.
 
-### Références
-- **ios-pipa** (QCA6390, iOS 26), résumé « BLUETOOTH WORKS IN iOS » : noyau = alimentation + micrologiciel + point H4
-  (`kernel control` + nœud de registre `bluetooth` avec `local-mac-address`, `transport-speed` en **OSData 4 octets**) ;
-  BlueTool remplacé par un répondeur XPC (`RunBuiltinScript boot/init/deepsleep` → 0) ; trou +0x60 de la table H4
-  de bluetoothd ; synchro des disques toutes les 10 s pour garder les appairages ; UART à 921600 pour l'A2DP.
-  Leurs réponses aux commandes vendeur Broadcom (0xfcxx) et 0x204a viennent de ce que leur puce est Qualcomm :
-  **la nôtre est une Broadcom, comme celles d'Apple** ; bluetoothd lui parle peut-être sans ces faux. À mesurer.
-- **HakiOS** `drivers/bluetooth/hakios.bt.c` : seulement une lecture des broches ; utile pour la méthode
-  (une étape par niveau de boot-arg, ne jamais toucher un bloc dont l'horloge est coupée).
+### References
+- **ios-pipa** (QCA6390, iOS 26), summary "BLUETOOTH WORKS IN iOS": kernel = power + firmware + H4 point
+  (`kernel control` + registry node `bluetooth` with `local-mac-address`, `transport-speed` as **4-byte OSData**);
+  BlueTool replaced by an XPC responder (`RunBuiltinScript boot/init/deepsleep` → 0); hole at +0x60 in the H4 table
+  of bluetoothd; disk sync every 10 s to keep pairings; UART at 921600 for A2DP.
+  Their answers to the Broadcom vendor commands (0xfcxx) and 0x204a come from their chip being Qualcomm:
+  **ours is a Broadcom, like Apple's**; bluetoothd may talk to it without these fakes. To be measured.
+- **HakiOS** `drivers/bluetooth/hakios.bt.c`: only a read of the pins; useful for the method
+  (one step per boot-arg level, never touch a block whose clock is off).
 
 ## 2. Plan
 
-| Étape | Contenu | Signe de réussite |
+| Step | Content | Sign of success |
 | --- | --- | --- |
-| 1 (B1L-0210) | `B2LBluetooth.cpp` : lecture DT/broches/CMU ; si l'horloge UART_BT est sur OSCCLK et ouverte : UART 115200 8N1 RTS/CTS, BT_EN, `HCI_Reset`, `Read_Local_Version`, puis BT_EN=0 | `THE CHIP ANSWERS`, `manufacturer=0xf` |
-| 2 | `.hcd` copié dans SYSTEM (comme `b2l-wifi/`) et lu par la graine ; `HCI_Download_Minidriver` (0xfc2e), enregistrements `Write_RAM` (0xfc4c), `Launch_RAM` (0xfc4e), 250 ms, `HCI_Reset` ; version relue | `lmp_subver` change après le chargement |
-| 3 | Débit : `Update_UART_Baud_Rate` (0xfc18) + UART à 921600 puis 3 Mbit/s (mux sur CLKCMU_PERIC1_IP, à lire avant) | `Read_Local_Version` répond au nouveau débit |
-| 4 | Point H4 pour bluetoothd (kernel control + nœud `bluetooth`, `transport-speed` OSData), BlueTool remplacé, fil de réception sur l'IRQ 0x198 ou en scrutation 1 ms | `H4: connected`, interrupteur de Réglages |
-| 5 | Recherche, appairage, A2DP, appairages gardés (sync des disques, à voir avec la session stockage) | casque appairé après redémarrage |
+| 1 (B1L-0210) | `B2LBluetooth.cpp`: read DT/pins/CMU; if the UART_BT clock is on OSCCLK and open: UART 115200 8N1 RTS/CTS, BT_EN, `HCI_Reset`, `Read_Local_Version`, then BT_EN=0 | `THE CHIP ANSWERS`, `manufacturer=0xf` |
+| 2 | `.hcd` copied into SYSTEM (like `b2l-wifi/`) and read by the seed; `HCI_Download_Minidriver` (0xfc2e), `Write_RAM` records (0xfc4c), `Launch_RAM` (0xfc4e), 250 ms, `HCI_Reset`; version read back | `lmp_subver` changes after loading |
+| 3 | Baud rate: `Update_UART_Baud_Rate` (0xfc18) + UART at 921600 then 3 Mbit/s (mux on CLKCMU_PERIC1_IP, to be read first) | `Read_Local_Version` answers at the new rate |
+| 4 | H4 point for bluetoothd (kernel control + `bluetooth` node, `transport-speed` OSData), BlueTool replaced, receive thread on IRQ 0x198 or polling at 1 ms | `H4: connected`, Settings toggle |
+| 5 | Search, pairing, A2DP, kept pairings (disk sync, to be checked with the storage session) | headset still paired after reboot |
 
-Règles tenues : une étape par build, aucun écrit sur le stockage, aucun registre CMU écrit à l'étape 1,
-tout registre écrit est journalisé avec sa valeur d'avant, `b2l_bt=0` coupe tout, `b2l_bt=1` = lecture seule.
+Rules kept: one step per build, no writes to storage, no CMU register written at step 1,
+every register write is logged with its previous value, `b2l_bt=0` turns everything off, `b2l_bt=1` = read-only.
 
-## 3. Étape 1 : ce qui part dans le build 0210
+## 3. Step 1: what goes into build 0210
 
-Fichier créé : `xnu-overlay/iokit/Kernel/arm/B2LBluetooth.cpp` (vérifié : compile sans avertissement avec les options
-de `B2LWifi.cpp`, `-Wall -Wextra`). À ajouter côté `xnu/` par la session qui construit (même forme que B2LWifi) :
-- `xnu/iokit/conf/files` : `iokit/Kernel/arm/B2LBluetooth.cpp optional iokitcpp b2l`
-- `xnu/iokit/KernelConfigTables.cpp`, après la ligne `B2LWifi` :
+File created: `xnu-overlay/iokit/Kernel/arm/B2LBluetooth.cpp` (checked: compiles without warnings with the options
+of `B2LWifi.cpp`, `-Wall -Wextra`). To be added on the `xnu/` side by the session that builds (same form as B2LWifi):
+- `xnu/iokit/conf/files`: `iokit/Kernel/arm/B2LBluetooth.cpp optional iokitcpp b2l`
+- `xnu/iokit/KernelConfigTables.cpp`, after the `B2LWifi` line:
   `"   {'IOClass'=B2LBluetooth;'IOProviderClass'=IOResources;'IOMatchCategory'=B2LBluetooth;},"`
 
-Déroulé : au démarrage du service, un fil lit `/bluetooth`, les quatre bancs de broches et les registres CMU de UART_BT.
-Si une porte d'horloge est coupée, ou si le mux n'est pas sur OSCCLK, il s'arrête là (aucune écriture). Sinon il attend
-que la graine Wi-Fi soit prête puis 30 s (pour ne pas lever BT_REG_ON pendant le démarrage du Wi-Fi), configure l'UART,
-allume la puce, envoie `HCI_Reset` et `Read_Local_Version`, et la rééteint.
+Sequence: when the service starts, a thread reads `/bluetooth`, the four pin banks and the CMU registers of UART_BT.
+If a clock gate is off, or if the mux is not on OSCCLK, it stops there (no write). Otherwise it waits
+for the Wi-Fi seed to be ready, then 30 s (so as not to raise BT_REG_ON during Wi-Fi startup), configures the UART,
+powers the chip, sends `HCI_Reset` and `Read_Local_Version`, and powers it down again.
 
-Écritures matérielles (toutes journalisées avant/après) : gpq0 CON/PUD (broches 0..3 seulement), gpm8-0 et gpg2-0
-(DAT puis CON), registres de l'UART_BT (USI_CON, USI_OPTION, UINTM, UINTP, ULCON, UBRDIV, UFRACVAL, UCON, UFCON, UMCON).
-Aucune écriture sur le stockage, ni sur CMU, PMU, ou broches d'un autre composant.
+Hardware writes (all logged before/after): gpq0 CON/PUD (pins 0..3 only), gpm8-0 and gpg2-0
+(DAT then CON), UART_BT registers (USI_CON, USI_OPTION, UINTM, UINTP, ULCON, UBRDIV, UFRACVAL, UCON, UFCON, UMCON).
+No writes to storage, nor to CMU, PMU, or pins of another component.
 
-Lignes à lire dans le journal :
-- `B2L BLUETOOTH: /bluetooth present, gpios <…>` et `B2L BLUETOOTH PINS[boot]` ;
-- `B2L BLUETOOTH CMU: mux=… div=… gate … qch=…` puis `UART_BT clock on, 26000000 Hz` (ou la raison de l'arrêt) ;
-- `B2L BLUETOOTH UART[before]: …` ;
-- **`HCI_Reset -> 7 byte(s): 04 0e 04 01 03 0c 00`** et **`THE CHIP ANSWERS`**, puis
-  `hci=… rev=… lmp=… manufacturer=0xf lmp_subver=…` (0xf = Broadcom) ;
-- en échec : `not sent (CTS …)` (la puce ne lève pas CTS) ou `no HCI answer, uerstat=…` ;
-- `PINS[off]` avec gpm8 dat bit 0 à 0, puis `step 1 done`.
+Lines to read in the log:
+- `B2L BLUETOOTH: /bluetooth present, gpios <…>` and `B2L BLUETOOTH PINS[boot]`;
+- `B2L BLUETOOTH CMU: mux=… div=… gate … qch=…` then `UART_BT clock on, 26000000 Hz` (or the reason for stopping);
+- `B2L BLUETOOTH UART[before]: …`;
+- **`HCI_Reset -> 7 byte(s): 04 0e 04 01 03 0c 00`** and **`THE CHIP ANSWERS`**, then
+  `hci=… rev=… lmp=… manufacturer=0xf lmp_subver=…` (0xf = Broadcom);
+- on failure: `not sent (CTS …)` (the chip does not raise CTS) or `no HCI answer, uerstat=…`;
+- `PINS[off]` with gpm8 dat bit 0 at 0, then `step 1 done`.
 
-Ce qui doit rester intact : Wi-Fi (join, IP), écran, GPU, tactile, UFS. Si la moindre régression apparaît, `b2l_bt=0`.
+What must stay intact: Wi-Fi (join, IP), screen, GPU, touch, UFS. If any regression appears, `b2l_bt=0`.
 
-### Résultat observé au build 0210 (journal `out/logs/0210-boot.txt`)
-Wi-Fi intact (join + IP). L'étape s'est arrêtée avant toute écriture : la puce n'a pas été allumée.
-- `/bluetooth missing` : le DT d'iOS est fabriqué par `uefi/XnuLoader/DeviceTree.c`, qui ajoute `/wlan` à la main mais
-  pas `/bluetooth`. Sans effet : les adresses viennent du DTB live Android.
-- Valeurs de départ (à garder pour toute écriture) : gpm8 con=0 dat=0 pud=0x1 ; gpg2 con=0 dat=0xc pud=0x1110111 ;
-  gpa2 con=0 dat=0x14 pud=0x11101111 (hostwake 0) ; gpq0 con=0x2220000 dat=0x70 pud=0x3331111.
-- CMU_PERIC1 UART_BT : **mux=0x10** (sur CLKCMU_PERIC1_IP, débit inconnu), mux2=0, div=0, portes rst/ipclk/pclk=0x200000
-  (manuel 0, valeur 1 : ouvertes), qch=0x3f0002 (requête logicielle, horloge forcée).
+### Result observed in build 0210 (log `out/logs/0210-boot.txt`)
+Wi-Fi intact (join + IP). The step stopped before any write: the chip was not powered on.
+- `/bluetooth missing`: the iOS DT is generated by `uefi/XnuLoader/DeviceTree.c`, which adds `/wlan` by hand but
+  not `/bluetooth`. No effect: the addresses come from the live Android DTB.
+- Starting values (to keep for any write): gpm8 con=0 dat=0 pud=0x1; gpg2 con=0 dat=0xc pud=0x1110111;
+  gpa2 con=0 dat=0x14 pud=0x11101111 (hostwake 0); gpq0 con=0x2220000 dat=0x70 pud=0x3331111.
+- CMU_PERIC1 UART_BT: **mux=0x10** (on CLKCMU_PERIC1_IP, baud rate unknown), mux2=0, div=0, rst/ipclk/pclk gates=0x200000
+  (manual 0, value 1: open), qch=0x3f0002 (software request, clock forced).
 
-## 4. Étape 1b (build suivant)
-Même fichier, deux changements :
-- `/bluetooth` n'est plus exigé, il est seulement signalé dans le journal.
-- Avant de toucher l'UART : mux `UART_BT_USER` (0x108001c0) 0x10 → 0x00 (OSCCLK 26 MHz), attente du bit BUSY, et
-  remise à 0x10 à la fin. Ce mux n'alimente que l'UART_BT. 26 MHz suffit jusqu'à 921600 bauds (écart 0,75 %),
-  le débit qu'ios-pipa a retenu pour l'A2DP.
-Lignes attendues en plus : `UART_BT gates open, 26000000 Hz once on OSCCLK (mux now CLKCMU_PERIC1_IP)`,
-`write cmu uart_bt mux +0x1c0 0x10 -> 0 (read back 0)` puis, à la fin, `… 0 -> 0x10 (read back 0x10)`.
+## 4. Step 1b (next build)
+Same file, two changes:
+- `/bluetooth` is no longer required, it is only reported in the log.
+- Before touching the UART: `UART_BT_USER` mux (0x108001c0) 0x10 → 0x00 (OSCCLK 26 MHz), wait for the BUSY bit, and
+  set back to 0x10 at the end. This mux only feeds UART_BT. 26 MHz is enough up to 921600 bauds (0.75 % error),
+  the rate ios-pipa chose for A2DP.
+Extra expected lines: `UART_BT gates open, 26000000 Hz once on OSCCLK (mux now CLKCMU_PERIC1_IP)`,
+`write cmu uart_bt mux +0x1c0 0x10 -> 0 (read back 0)` then, at the end, `… 0 -> 0x10 (read back 0x10)`.
 
-### Résultat observé au build 0211 : LA PUCE RÉPOND
-Wi-Fi resté connecté. `HCI_Reset -> 04 0e 04 01 03 0c 00`, puis ROM : **hci=9 rev=0 lmp=9 manufacturer=0xf (Broadcom)
-lmp_subver=0x1111**. CTS levé par la puce (`umstat=0x11`). Le mux est revenu à 0x10.
-Sans danger : les écritures DAT relues inchangées tant que la broche est en entrée (la relecture donne le niveau de la
-broche, le verrou s'applique au passage en sortie : `PINS[on]` montre bien dat=1). À la fin, gpm8-0 et gpg2-0 restent
-en sortie à 0 : c'est l'état où le pilote Linux `bcm43xx` les met au démarrage (`gpio_direction_output(…, 0)`).
+### Result observed in build 0211: THE CHIP ANSWERS
+Wi-Fi stayed connected. `HCI_Reset -> 04 0e 04 01 03 0c 00`, then ROM: **hci=9 rev=0 lmp=9 manufacturer=0xf (Broadcom)
+lmp_subver=0x1111**. CTS raised by the chip (`umstat=0x11`). The mux went back to 0x10.
+Harmless: the DAT writes read back unchanged while the pin is an input (the read gives the pin level; the lock applies when switching to output, `PINS[on]` does show dat=1). At the end, gpm8-0 and gpg2-0 stay
+as outputs at 0: this is the state that the Linux `bcm43xx` driver sets at startup (`gpio_direction_output(…, 0)`).
 
-## 5. Étape 2 (build suivant) : chargement du micrologiciel
-- Fichier : `bcm4375B1_semco.hcd` (sha256 8c8fb286…), copié en `device-s10/wifi-bt-fw/system/bt.hcd` (hors git) ;
-  `system-add-fast.sh` copie déjà tout ce dossier dans `SYSTEM:/b2l-wifi/`. Choix : le Wi-Fi tourne avec
-  `nvram.txt_CS01_semco_b1`, donc puce **B1**, module **Semco**. Il reste deux candidats : `bcm4375B1_semco.hcd`
-  (« Beyond E43 Ant0 ») et `_semco_sem.hcd` (« Beyond SEMCO BT EPA E43 Ant0 », amplificateur externe). J'ai pris le
-  premier, la configuration de base ; à confirmer plus tard en lisant la règle de choix dans le `libbt-vendor` du
-  vendor Android (lecture seule).
-- Noyau : `b2l_bt_fetch()` (dans `B2LBluetooth.cpp`) lit `b2l-wifi/bt.hcd` au moment de la graine. Deux lignes
-  à ajouter dans `bsd/kern/b2l_userspace_seed.h` : la déclaration et l'appel juste après `b2l_wifi_fetch();`.
-- Déroulé, après la version ROM : `Read_Local_Name`, `Download_Minidriver` (0xfc2e), 50 ms, les 1261 enregistrements
-  (1260 × `Write_RAM` 0xfc4c, puis `Launch_RAM` 0xfc4e), chacun attendant son Command Complete, 250 ms, `HCI_Reset`,
-  version et nom relus, puis extinction comme avant. Environ 30 s à 115200 bauds.
-- Coupures : `b2l_bt=2` = étape 1 seule (sans micrologiciel), `b2l_bt=1` lecture seule, `b2l_bt=0` rien.
-- Succès : `THE FIRMWARE RUNS (lmp_subver 0x1111 -> …)` et `Read_Local_Name` = « BCM4375B1 Beyond E43 Ant0 … ».
+## 5. Step 2 (next build): loading the firmware
+- File: `bcm4375B1_semco.hcd` (sha256 8c8fb286…), copied to `device-s10/wifi-bt-fw/system/bt.hcd` (outside git);
+  `system-add-fast.sh` already copies this whole folder into `SYSTEM:/b2l-wifi/`. Choice: Wi-Fi runs with
+  `nvram.txt_CS01_semco_b1`, so chip **B1**, module **Semco**. Two candidates remain: `bcm4375B1_semco.hcd`
+  ("Beyond E43 Ant0") and `_semco_sem.hcd` ("Beyond SEMCO BT EPA E43 Ant0", external amplifier). I took the
+  first one, the base configuration; to be confirmed later by reading the selection rule in the `libbt-vendor` of the
+  Android vendor partition (read-only).
+- Kernel: `b2l_bt_fetch()` (in `B2LBluetooth.cpp`) reads `b2l-wifi/bt.hcd` at seed time. Two lines
+  to add in `bsd/kern/b2l_userspace_seed.h`: the declaration and the call right after `b2l_wifi_fetch();`.
+- Sequence, after the ROM version: `Read_Local_Name`, `Download_Minidriver` (0xfc2e), 50 ms, the 1261 records
+  (1260 × `Write_RAM` 0xfc4c, then `Launch_RAM` 0xfc4e), each waiting for its Command Complete, 250 ms, `HCI_Reset`,
+  version and name read back, then power-down as before. About 30 s at 115200 bauds.
+- Cut-offs: `b2l_bt=2` = step 1 only (without firmware), `b2l_bt=1` read-only, `b2l_bt=0` nothing.
+- Success: `THE FIRMWARE RUNS (lmp_subver 0x1111 -> …)` and `Read_Local_Name` = "BCM4375B1 Beyond E43 Ant0 …".
 
-### Résultat observé au build 0212 : LE MICROLOGICIEL TOURNE
-1261 enregistrements envoyés en 17 s. Après `Launch_RAM` : révision HCI **0 → 0xad**, nom
-« BCM4375B1 Beyond E43 Ant0 [Baseline: 0173] ». `lmp_subver` reste 0x1111 sur cette puce, donc le test affichait à
-tort « not confirmed ». Wi-Fi intact.
+### Result observed in build 0212: THE FIRMWARE RUNS
+1261 records sent in 17 s. After `Launch_RAM`: HCI revision **0 → 0xad**, name
+"BCM4375B1 Beyond E43 Ant0 [Baseline: 0173]". `lmp_subver` stays 0x1111 on this chip, so the test wrongly displayed "not confirmed". Wi-Fi intact.
 
-## 6. Étape 3 (build suivant) : la puce reste allumée et passe à bluetoothd
-> **En pause (2026-11-14, demande du propriétaire)** : jamais flashée, rangée dans
-> `~/Developer/s10-port/bluetooth-step3-parked/`. État et reprise : `docs/bluetooth/status.md`.
-Lecture de bluetoothd 23G90 (désassemblage, lecture seule) :
-- `getenv("BT_HCI_TRANSPORT")` (0x10029798c), format `transport:pilote:chemin` séparé par `:`. Transports connus :
-  USB, H4DS, H4BC, **H4**, H5, APPLEBT, VIRT, PCIE, PCIESW, PCIESUN, APPLEPCIE ; pilotes : USB, **POSIX**, APPLEBT,
-  VIRT, PCIE… Sans la variable, bluetoothd lit une plist (« BT_HCI_TRANSPORT not set »).
-- Le pilote POSIX lit `nom,vitesse` (0x100192f90) ; nom par défaut **`com.apple.uart.sk.bluetooth`**, ouvert par
-  `socket(PF_SYSTEM)` + `ioctl(CTLIOCGINFO)` : c'est un **kernel control**, pas un service IOKit ni AppleConvergedIPC.
-- bluetoothd demande à BlueTool (XPC `com.apple.BlueTool`) `RunBuiltinScript` boot/init/deepsleep et lit la réponse
-  `result` (0 = bon), `firmware`, `manufacturer`.
+## 6. Step 3 (next build): the chip stays on and goes to bluetoothd
+> **Paused (2026-11-14, owner's request)**: never flashed, parked in
+> `~/Developer/s10-port/bluetooth-step3-parked/`. State and resumption: `docs/bluetooth/status.md`.
+Reading of bluetoothd 23G90 (disassembly, read-only):
+- `getenv("BT_HCI_TRANSPORT")` (0x10029798c), format `transport:driver:path` separated by `:`. Known transports:
+  USB, H4DS, H4BC, **H4**, H5, APPLEBT, VIRT, PCIE, PCIESW, PCIESUN, APPLEPCIE; drivers: USB, **POSIX**, APPLEBT,
+  VIRT, PCIE… Without the variable, bluetoothd reads a plist ("BT_HCI_TRANSPORT not set").
+- The POSIX driver reads `name,speed` (0x100192f90); default name **`com.apple.uart.sk.bluetooth`**, opened by
+  `socket(PF_SYSTEM)` + `ioctl(CTLIOCGINFO)`: it is a **kernel control**, not an IOKit service nor AppleConvergedIPC.
+- bluetoothd asks BlueTool (XPC `com.apple.BlueTool`) for `RunBuiltinScript` boot/init/deepsleep and reads the
+  `result` reply (0 = good), `firmware`, `manufacturer`.
 
-Ce qui change :
-- **Critère corrigé** : la valeur comparée est `lmp_subver<<16 | révision HCI` ; succès = elle a changé.
-- **Noyau (`B2LBluetooth.cpp`)** : niveau par défaut 4 = puce laissée allumée. Après le micrologiciel :
-  `Write_BD_ADDR` (0xfc01) avec l'adresse synthétique de B2LPlatformExpert (administrée localement, pas celle du
-  téléphone), relue par `Read_BD_ADDR` (seul le statut est journalisé). Puis kernel control
-  `com.apple.uart.sk.bluetooth` (flux, non privilégié) et entrée de registre `bluetooth` (local-mac-address 6 octets,
-  transport-speed OSData 4 octets = 115200, compatible `brcm,bcm4375`, `B2LBluetoothReady`). Un fil relaie en
-  scrutation 1 ms : FIFO RX de l'UART → client, anneau TX de 16 Kio → UART.
-- **Crochet d'exécution (`b2l_exec_bluetooth.h`)** : bluetoothd reçoit
-  `BT_HCI_TRANSPORT=H4:POSIX:com.apple.uart.sk.bluetooth,115200` et `BT_BAUDRATE=115200` ; BlueTool reçoit
-  `DYLD_INSERT_LIBRARIES=/usr/local/lib/b2l-bluetool-v1.dylib` si le fichier existe, et son pid est ajouté à la
-  politique dyld d'AMFI.
-- **Remplaçant de BlueTool (`userspace/b2l-bluetool.c`, construit par `scripts/build-bluetool-dylib.py`)** :
-  interpose `getopt` ; quand BlueTool appelle `getopt("c:hf:F:R")` en tête de main, la dylib écoute
-  `com.apple.BlueTool` et ne rend plus la main. boot/init : attend (jusqu'à 60 s) que le kernel control existe puis
-  répond 0 (19 si la puce n'est jamais montée) ; tout le reste : 0. Ses lignes de journal passent par
-  `setsockopt(0xb2)` sur le kernel control.
-- **Graine (`b2l_bt_seed.h`)** : `b2l_bt_fetch()` puis publication de la dylib dans `/usr/local/lib` (SYSTEM).
-  **Rien sur USERDATA.**
-- Coupures : `b2l_bt_ios=0` (ni dylib ni variables, la puce reste quand même allumée), `b2l_bt=3` (micrologiciel
-  puis extinction, comme 0212), `b2l_bt=2`, `b2l_bt=1`, `b2l_bt=0` comme avant.
-- Risques connus : bac à sable de BlueTool (socket ou XPC refusés), plantage de bluetoothd à l'extinction (case +0x60
-  de la table H4 vue par ios-pipa), 115200 bauds trop lent pour l'A2DP (921600 plus tard), appairages à
-  synchroniser sur disque.
+What changes:
+- **Corrected criterion**: the compared value is `lmp_subver<<16 | HCI revision`; success = it changed.
+- **Kernel (`B2LBluetooth.cpp`)**: default level 4 = chip left powered on. After the firmware:
+  `Write_BD_ADDR` (0xfc01) with the synthetic address from B2LPlatformExpert (locally administered, not the phone's),
+  read back by `Read_BD_ADDR` (only the status is logged). Then kernel control
+  `com.apple.uart.sk.bluetooth` (stream, unprivileged) and registry entry `bluetooth` (local-mac-address 6 bytes,
+  transport-speed OSData 4 bytes = 115200, compatible `brcm,bcm4375`, `B2LBluetoothReady`). A thread relays by
+  1 ms polling: UART RX FIFO → client, 16 KiB TX ring → UART.
+- **Execution hook (`b2l_exec_bluetooth.h`)**: bluetoothd receives
+  `BT_HCI_TRANSPORT=H4:POSIX:com.apple.uart.sk.bluetooth,115200` and `BT_BAUDRATE=115200`; BlueTool receives
+  `DYLD_INSERT_LIBRARIES=/usr/local/lib/b2l-bluetool-v1.dylib` if the file exists, and its pid is added to the
+  dyld policy of AMFI.
+- **BlueTool replacement (`userspace/b2l-bluetool.c`, built by `scripts/build-bluetool-dylib.py`)**: interposes `getopt`; when BlueTool calls `getopt("c:hf:F:R")` at the top of main, the dylib listens on
+  `com.apple.BlueTool` and never returns control. boot/init: waits (up to 60 s) for the kernel control to exist, then
+  replies 0 (19 if the chip never came up); everything else: 0. Its log lines go through
+  `setsockopt(0xb2)` on the kernel control.
+- **Seed (`b2l_bt_seed.h`)**: `b2l_bt_fetch()` then publication of the dylib into `/usr/local/lib` (SYSTEM).
+  **Nothing on USERDATA.**
+- Cut-offs: `b2l_bt_ios=0` (neither dylib nor variables, the chip still stays on), `b2l_bt=3` (firmware
+  then power-down, like 0212), `b2l_bt=2`, `b2l_bt=1`, `b2l_bt=0` as before.
+- Known risks: BlueTool's sandbox (socket or XPC refused), bluetoothd crash at power-down (+0x60 hole
+  in the H4 table seen by ios-pipa), 115200 bauds too slow for A2DP (921600 later), pairings to be synced to disk.

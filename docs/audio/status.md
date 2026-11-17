@@ -1,40 +1,40 @@
-# Audio — état au 2026-11-14 (en pause, demande du propriétaire)
+# Audio — status as of 2026-11-14 (paused, at the owner's request)
 
-Le propriétaire a demandé de s'arrêter là pour l'audio, sans build. On y reviendra plus tard.
+The owner asked to stop there for audio, without a build. We will come back to it later.
 
-## Ce qui marche (sur le téléphone, build 0213)
-- **Premier bip entendu** : au démarrage, le noyau joue un bip de 1 kHz à −10 dB pendant 0,7 s sur le haut-parleur du bas (CS35L40 bot@40), puis coupe tout.
-- Chemin utilisé : l'AP programme lui-même RDMA0 → SPUS → SIFS0 → UAIF1 de l'ABOX, sans le firmware Calliope. Le tampon audio est en DRAM (ring_pa 0x84b8c000 en 0213).
-- Les deux amplis CS35L40 (0x40 haut-parleur, 0x41 écouteur, id 35a40, rév. A0) répondent sur un I2C simulé par GPIO (gph0-6/7). Ils reçoivent les errata de la rév. A0 et leur OTP d'usine (cs35l41_otp_unpack), et l'ASP est en dsp_a esclave, 48 kHz.
-- PLL_AUD0 verrouillée à 1,18 GHz, ABOX v2.0.1, UAIF1 à 6,144 MHz (bclk).
-- Après le bip, tout est remis à sa valeur de départ, sauf PMU 0x1920 bit 11 (rétention des broches ABOX levée). Les amplis retournent en reset.
-- Le Wi-Fi n'a jamais été gêné.
+## What works (on the phone, build 0213)
+- **First beep heard**: at startup, the kernel plays a 1 kHz beep at −10 dB for 0.7 s on the bottom loudspeaker (CS35L40 bot@40), then cuts everything.
+- Path used: the AP programs RDMA0 → SPUS → SIFS0 → UAIF1 of the ABOX itself, without the Calliope firmware. The audio buffer is in DRAM (ring_pa 0x84b8c000 in 0213).
+- The two CS35L40 amplifiers (0x40 loudspeaker, 0x41 earpiece, id 35a40, rev. A0) answer on a simulated I2C bus by GPIO (gph0-6/7). They receive the rev. A0 errata and their factory OTP (cs35l41_otp_unpack), and the ASP is in dsp_a slave, 48 kHz.
+- PLL_AUD0 locked at 1.18 GHz, ABOX v2.0.1, UAIF1 at 6.144 MHz (bclk).
+- After the beep, everything is put back to its starting value, except PMU 0x1920 bit 11 (ABOX pin retention lifted). The amplifiers go back into reset.
+- Wi-Fi was never disturbed.
 
-## Étapes et journal (build par build)
-- 0210 A0 : lecture seule. 0211 A1 : identité des amplis. 0212 A2–A4 : ABOX lu, amplis réglés, cadencés par UAIF1. 0213 A5 : le bip.
-- Journal : `grep -a "B2L AUDIO"` dans `beyond2lte-ios/out/logs/021x-boot.txt`.
-- Détails techniques complets : `docs/audio/review-and-plan.md` §5 à §10.
+## Steps and log (build by build)
+- 0210 A0: read only. 0211 A1: amplifier identity. 0212 A2–A4: ABOX read, amplifiers set up, clocked by UAIF1. 0213 A5: the beep.
+- Log: `grep -a "B2L AUDIO"` in `beyond2lte-ios/out/logs/021x-boot.txt`.
+- Full technical details: `docs/audio/review-and-plan.md` §5 to §10.
 
-## Ce qui est installé (dans 0213)
-- `iokit/Kernel/arm/B2LAudio.h` (sha 5112968d…), appelé par `b2l_audio_probe()` dans `B2LCPU.cpp` juste après `b2l_gpu_probe()`.
-- Boot-arg `b2l_audio` : 0 coupé · 1 A0 · 2 +A1 · 3 +A2 · 4 +A3 · 5 +A4 · 6 (défaut) +bip.
+## What is installed (in 0213)
+- `iokit/Kernel/arm/B2LAudio.h` (sha 5112968d…), called by `b2l_audio_probe()` in `B2LCPU.cpp` just after `b2l_gpu_probe()`.
+- Boot-arg `b2l_audio`: 0 off · 1 A0 · 2 +A1 · 3 +A2 · 4 +A3 · 5 +A4 · 6 (default) +beep.
 
-## À vérifier
-- Le registre 0x4820 vaut 0x1 sur bot et 0x100 sur rcv. C'est voulu : bot est sur la voie 1 et rcv sur la voie 0, comme chez Samsung.
-- ABOX v2.0.1 : la position du RDMA se lit aux bits 27:12.
-- Le sens du bit 4 de RDMA CTRL0 est inconnu.
-- La SysMMU de l'ABOX est supposée en contournement.
-- Pas de firmware de protection des amplis (`cs35l40-*-spk-prot.wmfw`) : volume et durée à garder bas.
+## To check
+- Register 0x4820 is 0x1 on bot and 0x100 on rcv. This is intended: bot is on channel 1 and rcv on channel 0, as at Samsung.
+- ABOX v2.0.1: the RDMA position is read in bits 27:12.
+- The meaning of bit 4 of RDMA CTRL0 is unknown.
+- The ABOX SysMMU is assumed to be bypassed.
+- No amplifier protection firmware (`cs35l40-*-spk-prot.wmfw`): keep the volume and duration low.
 
-## Travail en cours rangé (jamais construit)
-- La session Audio préparait le branchement à iOS (lots 3–4 : `/dev/b2l-audio`, puis un pilote vu par coreaudiod/audiomxd). Son `B2LAudio.h` inachevé est rangé dans `~/Developer/s10-port/audio-next-parked/B2LAudio.h.lot3-unfinished` (sha d76cae82…). Il n'est pas relu et peut ne pas compiler. Seul ce fichier avait changé dans l'overlay ; `b2l_audio_seed.h` n'a jamais été créé.
-- Plug-in audio côté iOS (dérivé de HakiOS, MIT) : source et `build.sh` dans `Port iOS 26 to S10/audio/plugin/`, compilé dans `~/Developer/s10-port/build-audio/b2l-audio-v1/`. Pas sur SYSTEM.
-- `xnu-overlay/` est remis à l'état 0213 pour l'audio.
+## Parked unfinished work (never built)
+- The audio session was preparing the connection to iOS (batches 3–4: `/dev/b2l-audio`, then a driver seen by coreaudiod/audiomxd). Its unfinished `B2LAudio.h` is parked in `~/Developer/s10-port/audio-next-parked/B2LAudio.h.lot3-unfinished` (sha d76cae82…). It has not been re-read and may not compile. Only this file had changed in the overlay; `b2l_audio_seed.h` was never created.
+- iOS-side audio plug-in (derived from HakiOS, MIT): source and `build.sh` in `Port iOS 26 to S10/audio/plugin/`, built in `~/Developer/s10-port/build-audio/b2l-audio-v1/`. Not on SYSTEM.
+- `xnu-overlay/` is reset to the 0213 state for audio.
 
-## Données
-- `~/Developer/s10-port/vendor-audio/` (hors git) : calliope*.bin, calliope2.dt, cs35l40-{bot,rcv}-dsp1-spk-prot.{wmfw,bin}, *-calib.bin (propres à ce téléphone) et mixer_paths.xml. Copiés en lecture seule depuis vendor (erofs). Empreintes dans SHA256SUMS.
+## Data
+- `~/Developer/s10-port/vendor-audio/` (outside git): calliope*.bin, calliope2.dt, cs35l40-{bot,rcv}-dsp1-spk-prot.{wmfw,bin}, *-calib.bin (specific to this phone) and mixer_paths.xml. Copied read-only from vendor (erofs). Fingerprints in SHA256SUMS.
 
-## Pour reprendre
-1. Repartir du 0213 : le bip marche.
-2. Lot suivant prévu : `/dev/b2l-audio` avec une garde de niveau, puis le côté iOS (AudioServerPlugIn ou équivalent). Si quelque chose doit aller sur USERDATA : accord du propriétaire d'abord.
-3. Plus tard : charger le firmware de protection des amplis avant de monter le volume.
+## To resume
+1. Start again from 0213: the beep works.
+2. Next planned batch: `/dev/b2l-audio` with a level guard, then the iOS side (AudioServerPlugIn or equivalent). If anything must go to USERDATA: the owner's agreement first.
+3. Later: load the amplifier protection firmware before raising the volume.

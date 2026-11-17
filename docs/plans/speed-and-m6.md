@@ -1,77 +1,77 @@
-# Plan : vitesse du pilote Metal, puis M6 (interface sur le GPU)
+# Plan: Metal driver speed, then M6 (interface on the GPU)
 
-Date : 2026-11-07. Décidé avec le propriétaire, après B1L-0075.
+Date: 2026-11-07. Decided with the owner, after B1L-0075.
 
-## Décisions
+## Decisions
 
-| Question | Choix |
+| Question | Choice |
 | --- | --- |
-| Priorité après B1L-0075 | Finir la vitesse du pilote avant de toucher l'interface |
-| Coût PAC du code d'Apple | Patch au chargement par le noyau, **après** M6 (corecrypto exclu) |
-| Entrée dans M6 | Une app de test avec un `CAMetalLayer` d'abord, backboardd ensuite |
-| Critères de réussite | 40 images/s en défilement sur l'accueil, Liquid Glass correct, plus rapide que le rendu CPU |
+| Priority after B1L-0075 | Finish driver speed before touching the interface |
+| Cost of Apple's PAC code | Patch at load time by the kernel, **after** M6 (corecrypto excluded) |
+| Entry into M6 | A test app with a `CAMetalLayer` first, backboardd afterwards |
+| Success criteria | 40 frames/s while scrolling on the home screen, correct Liquid Glass, faster than CPU rendering |
 
-Le cache de shaders sur disque n'est pas un critère de réussite. Il reste prévu dans M6 (étape 6), parce qu'il évite les saccades.
+The on-disk shader cache is not a success criterion. It remains planned in M6 (step 6), because it avoids stutters.
 
-## Étape 1 : vitesse du pilote (objectif : ~0,2 ms par dessin)
+## Step 1: driver speed (target: ~0.2 ms per draw)
 
-Mesure de référence : la ligne `M5 bench` (200 dessins dans une passe, image vérifiée contre le Mac).
+Reference measurement: the `M5 bench` line (200 draws in one pass, image verified against the Mac).
 
-| Build | Changement | Mesure attendue |
+| Build | Change | Expected measurement |
 | --- | --- | --- |
-| B1L-0075 (flashé) | Mesa et pilote sans retours signés (`-fno-ptrauth-returns`, 0 `retab`) | Le temps par dessin (1,2 à 3,4 ms avant) |
-| B1L-0076 | Sans appels signés (`-fno-ptrauth-calls`) : retire les 3067 `blraaz`. Sûr, car le noyau accepte déjà les pointeurs non signés | Ce que coûtaient les appels signés |
-| B1L-0077 | Relais vers les fonctions du système (`__auth_stubs`) : voir si l'éditeur de liens peut produire des relais non signés | Ce qui reste des appels vers libSystem |
-| B1L-0078 | Pas de reliaison inutile : un shader, des constantes ou des tampons inchangés depuis le dessin précédent ne sont pas reliés à nouveau | Le coût propre à Mesa et panfrost |
-| (si besoin) | Profil d'un dessin : compteurs de pièges PAC du processus pendant la mesure, temps par fonction | Le prochain point lent |
+| B1L-0075 (flashed) | Mesa and driver without signed returns (`-fno-ptrauth-returns`, 0 `retab`) | Time per draw (1.2 to 3.4 ms before) |
+| B1L-0076 | Without signed calls (`-fno-ptrauth-calls`): removes the 3067 `blraaz`. Safe, because the kernel already accepts unsigned pointers | What the signed calls cost |
+| B1L-0077 | Stubs toward system functions (`__auth_stubs`): check whether the linker can produce unsigned stubs | What remains of calls to libSystem |
+| B1L-0078 | No useless relinking: a shader, constants or buffers unchanged since the previous draw are not relinked | The cost specific to Mesa and panfrost |
+| (if needed) | Profile of one draw: process PAC trap counters during measurement, time per function | The next slow point |
 
-**Critère pour passer à l'étape 2 :** environ 0,2 à 0,3 ms par dessin, ou une explication chiffrée de ce qui reste, si c'est dans le code d'Apple.
+**Criterion to move to step 2:** about 0.2 to 0.3 ms per draw, or a quantified explanation of what remains, if it is in Apple's code.
 
-## Étape 2 : M6a, une app de test à l'écran
+## Step 2: M6a, a test app on screen
 
-- Une petite app avec un `CAMetalLayer` plein écran, affichée par le serveur d'affichage actuel (rendu CPU) :
-  - elle dessine une image animée simple avec les shaders de QuartzCore ;
-  - elle compte ses images par seconde.
-- **Ce qu'elle valide :**
-  - la présentation réelle à l'écran (`presentDrawable` → file d'images de CoreAnimation → compositeur → écran) ;
-  - l'attente par le noyau de la fin du GPU avant l'affichage (`HakiosMaliDrawn`, `maliSeq`) ;
-  - les images par seconde réelles d'une app Metal.
-- **Risque faible :** l'interface reste en rendu CPU.
+- A small app with a full-screen `CAMetalLayer`, displayed by the current display server (CPU rendering):
+  - it draws a simple animated image with the QuartzCore shaders;
+  - it counts its frames per second.
+- **What it validates:**
+  - the real on-screen presentation (`presentDrawable` → CoreAnimation image queue → compositor → screen);
+  - the kernel's wait for the end of the GPU before display (`HakiosMaliDrawn`, `maliSeq`);
+  - the real frames per second of a Metal app.
+- **Low risk:** the interface stays on CPU rendering.
 
-## Étape 3 : M6b, backboardd sur le GPU, derrière un interrupteur
+## Step 3: M6b, backboardd on the GPU, behind a switch
 
-- Un réglage au boot, désactivé par défaut, laisse QuartzCore de backboardd voir le Mali. Le boot normal reste en rendu CPU.
-- **À traiter, d'après ce qu'on a déjà vu :**
-  - les 189 shaders de QuartzCore, dont `fixed_frag_lph_cpf` et sa soixantaine de *function constants* ;
-  - l'archive de pipelines précompilés d'Apple, à refuser proprement ;
-  - `newTextureWithDescriptor:iosurface:plane:slice:` (encore un stub d'Apple, qui fait un abort) ;
-  - les formats que le compositeur demande, par exemple YCbCr 420 en deux plans pour la vidéo.
-- Ensuite : écran de verrouillage, puis écran d'accueil.
+- A boot setting, disabled by default, lets backboardd's QuartzCore see the Mali. Normal boot stays on CPU rendering.
+- **To handle, based on what we have already seen:**
+  - the 189 QuartzCore shaders, including `fixed_frag_lph_cpf` and its sixty or so *function constants*;
+  - Apple's precompiled pipeline archive, to be refused cleanly;
+  - `newTextureWithDescriptor:iosurface:plane:slice:` (still an Apple stub, which aborts);
+  - the formats the compositor requests, for example YCbCr 420 in two planes for video.
+- Then: lock screen, then home screen.
 
-## Étape 4 : Liquid Glass
+## Step 4: Liquid Glass
 
-- Flous et verre (passes `downsample`, `upsample` et `variable_blur` de QuartzCore).
-- Contrôle visuel : Centre de contrôle, dock et barres.
+- Blurs and glass (`downsample`, `upsample` and `variable_blur` passes of QuartzCore).
+- Visual check: Control Center, dock and bars.
 
-## Étape 5 : mesure contre les critères
+## Step 5: measurement against the criteria
 
-- Images par seconde en défilement sur l'écran d'accueil (objectif : 40).
-- Comparaison sur les mêmes écrans entre GPU et CPU (la bascule se fait par l'interrupteur de l'étape 3).
+- Frames per second while scrolling on the home screen (target: 40).
+- Comparison on the same screens between GPU and CPU (switching is done with the step 3 switch).
 
-## Étape 6 : patch PAC du code d'Apple au chargement (après M6)
+## Step 6: PAC patch of Apple's code at load time (after M6)
 
-- Le noyau remplace dans les pages de code, au moment où elles sont chargées :
-  - `retab` → `ret` ;
-  - `blraaz` → `blr` ;
+- The kernel replaces, in the code pages, at the moment they are loaded:
+  - `retab` → `ret`;
+  - `blraaz` → `blr`;
   - `aut*` → NOP.
 
-  Ça prolonge le cache natif existant, dont il faut corriger les rejets (« mismatch »).
-- Rien n'est modifié sur disque, et corecrypto est exclu (il vérifie l'intégrité de son code).
-- **Effet attendu :** une baisse forte des ~51 000 pièges par seconde du système, pour tout iOS et pas seulement le GPU.
-- Cache de shaders sur disque, contre les saccades de compilation (0,5 à 1 s par nouveau shader).
+  This extends the existing native cache, whose rejections ("mismatch") must be corrected.
+- Nothing is modified on disk, and corecrypto is excluded (it verifies the integrity of its own code).
+- **Expected effect:** a strong drop in the system's ~51,000 traps per second, for all of iOS and not only the GPU.
+- On-disk shader cache, against stutters from compilation (0.5 to 1 s per new shader).
 
-## Règles inchangées
+## Unchanged rules
 
-- Un changement par build, avec ses notes `docs/journal/build-b1l-NNNN.md`.
-- `metal-progress.md` mis à jour après chaque build et chaque test.
-- Flash sans demander, pour le travail Metal, avec toutes les gardes (TWRP root, modèle, taille, hash, relecture).
+- One change per build, with its notes `docs/journal/build-b1l-NNNN.md`.
+- `metal-progress.md` updated after each build and each test.
+- Flash without asking, for Metal work, with all the guards (TWRP root, model, size, hash, re-read).

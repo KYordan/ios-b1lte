@@ -1,21 +1,21 @@
-# Carte des partitions — Galaxy S10 SM-G973F (beyond1lte)
+# Partition map — Galaxy S10 SM-G973F (beyond1lte)
 
-Données mesurées depuis TWRP root (`docs/device-facts.md`).
+Data measured from TWRP root (`docs/device-facts.md`).
 
-## Partitions où l'on peut écrire (avec ce kit)
+## Partitions that can be written to (with this kit)
 
-| Nom | Bloc | Taille | Contenu | Écrit par |
+| Name | Block | Size | Content | Written by |
 |-----|------|--------|---------|-----------|
-| `boot` | `/dev/block/sda14` | 57 671 680 octets (55 Mio) | `boot.img` : BootShim + UEFI FD + DTB + trailer XNU | `flash-images.sh` |
-| `system` | `/dev/block/sda25` | 7 340 032 000 octets | HFS+ journalisé : cache natif `b2l-cache.bin` + queue journal 16 Mio | `flash-images.sh` |
-| `userdata` | `/dev/block/sda34` | 499 641 200 640 octets (~465 Gio) | Racine HFS+ iOS (32 Gio image) | `flash-images.sh` |
+| `boot` | `/dev/block/sda14` | 57,671,680 bytes (55 MiB) | `boot.img`: BootShim + UEFI FD + DTB + XNU trailer | `flash-images.sh` |
+| `system` | `/dev/block/sda25` | 7,340,032,000 bytes | Journaled HFS+: native cache `b2l-cache.bin` + 16 MiB journal tail | `flash-images.sh` |
+| `userdata` | `/dev/block/sda34` | 499,641,200,640 bytes (~465 GiB) | iOS HFS+ root (32 GiB image) | `flash-images.sh` |
 
-## Partitions à NE JAMAIS écrire
+## Partitions to NEVER write
 
-`bota*`, `efs`, `sec_efs`, `cpefs`, `radio`, `keystorage`, `keydata`, `keyrefuge`, `param`, `up_param`, `uh`, `uhcfg`, `steady`, `persistent`, `misc`, `recovery`, `dtb`, `dtbo`, `vbmeta`, la GPT.
+`bota*`, `efs`, `sec_efs`, `cpefs`, `radio`, `keystorage`, `keydata`, `keyrefuge`, `param`, `up_param`, `uh`, `uhcfg`, `steady`, `persistent`, `misc`, `recovery`, `dtb`, `dtbo`, `vbmeta`, the GPT.
 
-## Sauvegardes existantes
+## Existing backups
 
-`~/Developer/s10-port/device-s10/backup-20261103/` contient déjà : efs, sec_efs, cpefs, boot, recovery, dtb, dtbo, vbmeta, uh, uhcfg, param, up_param, keystorage, steady, persistent, misc (tous SHA-256 vérifiés).
+`~/Developer/s10-port/device-s10/backup-20261103/` already contains: efs, sec_efs, cpefs, boot, recovery, dtb, dtbo, vbmeta, uh, uhcfg, param, up_param, keystorage, steady, persistent, misc (all SHA-256 verified).
 
-L'Android SYSTEM n'a pas été sauvegardé (choix du propriétaire). Android userdata est disparu. Un retour à Android nécessite Odin avec le firmware stock `G973F`.
+Android SYSTEM was not backed up (owner's choice). Android userdata is gone. Returning to Android requires Odin with the stock `G973F` firmware.

@@ -1,105 +1,105 @@
-# Plan des correctifs après B1L-0003 (phase 4)
+# Plan of fixes after B1L-0003 (phase 4)
 
-État au 2026-11-04, observé par le propriétaire sur le S10 :
+State as of 2026-11-04, observed by the owner on the S10:
 
-| Élément | État |
+| Element | State |
 | --- | --- |
-| Écran de verrouillage, tactile, clavier | **Fonctionnent** |
-| Réglages | **Plante** à l'ouverture |
-| Centre de contrôle | **Ne s'affiche pas** |
-| Fond d'écran | Noir |
-| Horloge | Rouge |
-| Fluidité | Faible : rendu CPU en 1440×3040, @3x |
+| Lock screen, touch, keyboard | **Work** |
+| Settings | **Crashes** on opening |
+| Control Center | **Does not appear** |
+| Wallpaper | Black |
+| Clock | Red |
+| Smoothness | Low: CPU rendering at 1440×3040, @3x |
 
-Règle du projet : **une seule modification par build**, avec un journal `docs/journal/build-b1l-XXXX.md`.
-Les correctifs côté **kernel ou loader** passent par BOOT (~26 Mo, quelques secondes).
-Les correctifs côté **iOS** touchent la racine (USERDATA). `[HYPOTHÈSE]` = à prouver par les journaux.
+Project rule: **a single change per build**, with a log `docs/journal/build-b1l-XXXX.md`.
+Fixes on the **kernel or loader** side go through BOOT (~26 MB, a few seconds).
+Fixes on the **iOS** side touch the root (USERDATA). `[HYPOTHESIS]` = to be proven by the logs.
 
-## Constats de l'étape 0 (2026-11-04, journaux `out/logs/0003.logarchive`)
+## Findings of step 0 (2026-11-04, logs `out/logs/0003.logarchive`)
 
-- **Réglages n'a pas de bug : il est tué par le chien de garde.** Les 3 rapports `Preferences-*.ips` donnent
-  `0x8BADF00D`, « scene-create watchdog transgression … exhausted real (wall clock) time allowance of 20.00 seconds ».
-  Au moment du kill : 167 s de CPU, dont 113 s en système, ce qui correspond à l'émulation arm64e du code pas encore traduit.
-  Le thread principal est dans SwiftUI (`SidebarRow_iOS`, `ScaledMetric`).
-  Correction : `BKNoWatchdogs = YES` dans `com.apple.springboard`, comme sur le S7 (`sweet-root-tweaks.py`, `herolte-tune-ios-root.sh`),
-  puis le cache natif apprend le code de Réglages au fil des démarrages.
-- Autres plantages : services vocaux (KonaSynthesizer, SiriAUSP, MacinTalkAUSP, MauiAUSP), MomentsUIService et BlastDoor.
-  Ils sont sans effet visible, mais candidats au nettoyage des démons (performances).
-- **Taille d'écran non standard** : 1440×3040 en @3x donne 480×1013,33 points. Les fonds du système ne prévoient que
-  393×852 … **440×956** (D94) et « any ». Le S7 avait ce problème (WallpaperKit filtre par `logicalScreenClass`).
+- **Settings has no bug: it is killed by the watchdog.** The 3 `Preferences-*.ips` reports give
+  `0x8BADF00D`, "scene-create watchdog transgression … exhausted real (wall clock) time allowance of 20.00 seconds".
+  At the time of the kill: 167 s of CPU, of which 113 s in system time, which matches the arm64e emulation of code not yet translated.
+  The main thread is in SwiftUI (`SidebarRow_iOS`, `ScaledMetric`).
+  Fix: `BKNoWatchdogs = YES` in `com.apple.springboard`, as on the S7 (`sweet-root-tweaks.py`, `herolte-tune-ios-root.sh`),
+  then the native cache learns the Settings code over successive boots.
+- Other crashes: voice services (KonaSynthesizer, SiriAUSP, MacinTalkAUSP, MauiAUSP), MomentsUIService and BlastDoor.
+  They have no visible effect, but are candidates for daemon cleanup (performance).
+- **Non-standard screen size**: 1440×3040 at @3x gives 480×1013.33 points. The system wallpapers only cover
+  393×852 … **440×956** (D94) and "any". The S7 had this problem (WallpaperKit filters by `logicalScreenClass`).
 
-## Ordre révisé
+## Revised order
 
-1. **B1L-0004 (racine)** : `BKNoWatchdogs`. Un seul fichier de préférences, préparé sur la copie à jour de USERDATA.
-2. **B1L-0005 (BOOT)** : écran logique **880×1912 en @2x = 440×956 points**, la taille réelle de l'iPhone 16 Pro Max,
-   au lieu de 960×2026. On a 2,6× moins de pixels qu'aujourd'hui, la classe d'écran D94 et un étirement de 3 % vers le panneau.
-   Il faut aussi forcer la régénération du cache MobileGestalt : la sauvegarde unique de `b2l_profile_cache_refresh`
-   existe déjà, donc il faut une nouvelle génération.
-3. **B1L-0006 (racine)** : Réduire la transparence (centre de contrôle, horloge).
-4. Fond d'écran : à réévaluer après B1L-0005 (classe d'écran correcte).
+1. **B1L-0004 (root)**: `BKNoWatchdogs`. A single preferences file, prepared on the up-to-date copy of USERDATA.
+2. **B1L-0005 (BOOT)**: logical screen **880×1912 at @2x = 440×956 points**, the real size of the iPhone 16 Pro Max,
+   instead of 960×2026. We get 2.6× fewer pixels than today, the D94 screen class, and a 3% stretch toward the panel.
+   The MobileGestalt cache regeneration must also be forced: the single backup of `b2l_profile_cache_refresh`
+   already exists, so a new generation is needed.
+3. **B1L-0006 (root)**: Reduce transparency (control center, clock).
+4. Wallpaper: to be re-evaluated after B1L-0005 (correct screen class).
 
-## Étape 0 : journaux et base de travail (aucune écriture sur le téléphone)
+## Step 0: logs and working base (no write to the phone)
 
-Sans ces données, les étapes 3 et 4 ne seraient que des suppositions.
+Without this data, steps 3 and 4 would be mere guesses.
 
-1. Depuis TWRP, exporter les journaux unifiés iOS (tracev3) et les rapports de plantage `.ips` :
+1. From TWRP, export the iOS unified logs (tracev3) and the `.ips` crash reports:
    `B2L_BOARD=beyond1lte B2L_SERIAL=<SERIAL> scripts/pull-b2l-unified-logs.py --adb <adb> --include-crash-reports --output out/logs/0003.logarchive`.
-   On cherchera : le plantage de Preferences (exception, backtrace), les erreurs CoreAnimation, CoreImage et CoreGraphics
-   (`invalid image colorspace: NULL`, `invalid context`), et PosterBoard.
-2. Relire USERDATA (32 Gio) vers le Mac, pour obtenir `ios26-userdata-live.img`.
-   **Indispensable avant toute modification de la racine** : le cache natif a réécrit des pages traduites
-   dans les fichiers iOS du téléphone. Réécrire l'image d'origine effacerait ces traductions
-   et ramènerait un démarrage froid de 40 minutes et plus.
-   Les changements de racine se font ensuite sur cette copie, puis `flash-chunked.sh` ne réécrit que les morceaux modifiés.
+   We will look for: the Preferences crash (exception, backtrace), CoreAnimation, CoreImage and CoreGraphics errors
+   (`invalid image colorspace: NULL`, `invalid context`), and PosterBoard.
+2. Read USERDATA (32 GiB) back to the Mac, to obtain `ios26-userdata-live.img`.
+   **Essential before any change to the root**: the native cache has rewritten translated pages
+   into the iOS files on the phone. Rewriting the original image would erase these translations
+   and bring back a cold boot of 40 minutes or more.
+   Root changes are then made on this copy, and `flash-chunked.sh` only rewrites the modified chunks.
 
-## Étape 1 : B1L-0004, résolution 2/3 en @2x (BOOT seulement)
+## Step 1: B1L-0004, 2/3 resolution at @2x (BOOT only)
 
-Le plus gros gain de fluidité, et indépendant des autres problèmes.
+The biggest smoothness gain, and independent of the other problems.
 
-- Aujourd'hui : framebuffer de 1440×3040 et `display-scale = 3`, soit 480×1013 points (`uefi/XnuLoader/DeviceTree.c`).
-- Cible : **960×2026 pixels en @2x**. On garde **les mêmes 480×1013 points**, donc les mêmes mises en page,
-  avec **2,25× moins de pixels** à dessiner pour le CPU.
-- Le kernel agrandit l'image ×1,5 vers les 1440×3040 de l'écran. C'est la méthode du S7 (`sweetfb_scale`,
-  « logical = 2/3 panel, x1.5 », patches 0222 et 0236 de `ios-herolte`).
-- À modifier :
-  - `B2LFramebuffer.cpp` : taille logique annoncée à iOS, plus une copie mise à l'échelle (CPU, puis GPU au palier 6.3) ;
-  - `DeviceTree.c` : `display-scale = 2` et `artwork-scale-factor = 2` ;
-  - régénérer le cache MobileGestalt, via le rafraîchissement déjà présent (`B2L PROFILE: MobileGestalt refresh`).
-    Le S7 a dû effacer ce cache une fois. `[VERIFY]`
-- Risques : des ressources @2x absentes pour le profil D94 (repli @3x mis à l'échelle), et un coût CPU pour la copie ×1,5.
-- Critère : écran de verrouillage et clavier nets, sans décalage du tactile. Mesurer le temps jusqu'à l'écran de verrouillage
-  et l'utilisation CPU au repos, avant et après.
-- Retour arrière : BOOT 0003.
+- Today: framebuffer of 1440×3040 and `display-scale = 3`, i.e. 480×1013 points (`uefi/XnuLoader/DeviceTree.c`).
+- Target: **960×2026 pixels at @2x**. We keep **the same 480×1013 points**, so the same layouts,
+  with **2.25× fewer pixels** to draw for the CPU.
+- The kernel enlarges the image ×1.5 to the screen's 1440×3040. This is the S7 method (`sweetfb_scale`,
+  "logical = 2/3 panel, x1.5", patches 0222 and 0236 of `ios-herolte`).
+- To modify:
+  - `B2LFramebuffer.cpp`: logical size announced to iOS, plus a scaled copy (CPU, then GPU at step 6.3);
+  - `DeviceTree.c`: `display-scale = 2` and `artwork-scale-factor = 2`;
+  - regenerate the MobileGestalt cache, via the refresh already present (`B2L PROFILE: MobileGestalt refresh`).
+    The S7 had to erase this cache once. `[VERIFY]`
+- Risks: missing @2x resources for the D94 profile (fallback to @3x scaled), and a CPU cost for the ×1.5 copy.
+- Criterion: lock screen and keyboard sharp, with no touch offset. Measure the time to the lock screen
+  and the idle CPU usage, before and after.
+- Rollback: BOOT 0003.
 
-## Étape 2 : B1L-0005, réduire la transparence (racine, très petit changement)
+## Step 2: B1L-0005, reduce transparency (root, very small change)
 
-`[HYPOTHÈSE]` : le centre de contrôle et l'horloge rouge viennent des matériaux d'iOS 26 (Liquid Glass, vibrancy :
-flou, matrice de couleur, couches de fond) que le rendu CPU ne sait pas appliquer. C'est le même symptôme que le
-« voile rouge » de vibrancy sur le S7.
+`[HYPOTHESIS]`: the control center and the red clock come from iOS 26 materials (Liquid Glass, vibrancy:
+blur, color matrix, background layers) that CPU rendering cannot apply. This is the same symptom as the
+"red veil" of vibrancy on the S7.
 
-- Test le moins cher : activer *Réduire la transparence* dans les préférences d'accessibilité de la racine.
-  Les surfaces deviennent opaques et l'horloge devrait passer en blanc uni.
-- Si le centre de contrôle s'affiche : la cause est confirmée, et la vraie correction (filtres, puis GPU) passe en phase 6.
-- Si rien ne change : la cause est ailleurs, et les journaux de l'étape 0 tranchent.
+- Cheapest test: enable *Reduce Transparency* in the root's accessibility preferences.
+  Surfaces become opaque and the clock should turn plain white.
+- If the control center appears: the cause is confirmed, and the real fix (filters, then GPU) moves to phase 6.
+- If nothing changes: the cause is elsewhere, and the step 0 logs will settle it.
 
-## Étape 3 : B1L-0006, plantage de Réglages
+## Step 3: B1L-0006, Settings crash
 
-Cause inconnue : ce sera le rapport `.ips` de l'étape 0.
-- Sur le S10+, Réglages s'ouvre depuis 0099. On a les mêmes patches kernel (état 0100), donc le plantage peut venir
-  d'une différence du S10, ou d'un panneau lié au matériel (batterie, écran, Wi-Fi).
-- Pistes à vérifier dans l'ordre : exception dans Preferences.app ou un de ses bundles, service absent (XPC),
-  ou propriété MobileGestalt incohérente.
+Unknown cause: it will be the `.ips` report from step 0.
+- On the S10+, Settings has opened since 0099. We have the same kernel patches (state 0100), so the crash may come from
+  a difference of the S10, or from a hardware-related panel (battery, screen, Wi-Fi).
+- Leads to check, in order: exception in Preferences.app or one of its bundles, missing service (XPC),
+  or inconsistent MobileGestalt property.
 
-## Étape 4 : fond d'écran
+## Step 4: wallpaper
 
-`[HYPOTHÈSE]` : PosterBoard n'a aucun fournisseur de poster. Ce sont des extensions installées comme des apps,
-et l'installation d'apps est bloquée sur HFS (erreur 166, « 50 candidates, 0 installée » sur le S10+).
-- Court terme : image fixe dessinée depuis SpringBoard, comme le S7 (`gpu/eagl/src/herosb.c`).
-- Long terme : compatibilité de staging sur HFS (`docs/hfs-apfs-installation.md` de l'auteur), qui débloque aussi les apps.
+`[HYPOTHESIS]`: PosterBoard has no poster provider. These are extensions installed like apps,
+and app installation is blocked on HFS (error 166, "50 candidates, 0 installed" on the S10+).
+- Short term: static image drawn from SpringBoard, as on the S7 (`gpu/eagl/src/herosb.c`).
+- Long term: staging compatibility on HFS (the author's `docs/hfs-apfs-installation.md`), which also unblocks the apps.
 
-## Ensuite (plan général)
+## Then (general plan)
 
-- Performances : déplacer `BTAudioHALPlugin` (sur le S7, le CPU au repos passe de >300 % à <25 %), démons qui bouclent,
-  traduction arm64e statique de la racine (voir la discussion du 2026-11-04).
-- Phase 5 : Wi-Fi (Broadcom PCIe). Phase 6 : GPU Mali-G76 (`docs/gpu/herolte-reference.md`).
-- Veille et limite thermique : toujours absentes, ne pas laisser l'appareil allumé sans surveillance.
+- Performance: move `BTAudioHALPlugin` (on the S7, idle CPU drops from >300% to <25%), daemons that loop,
+  static arm64e translation of the root (see the discussion of 2026-11-04).
+- Phase 5: Wi-Fi (Broadcom PCIe). Phase 6: Mali-G76 GPU (`docs/gpu/herolte-reference.md`).
+- Sleep and thermal limit: still absent, do not leave the device on unattended.
