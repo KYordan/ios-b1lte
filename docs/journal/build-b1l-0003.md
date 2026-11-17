@@ -46,4 +46,4 @@ Retour arrière : réécrire `out/b1l-ios-0002/boot.img` (`fbf6b520…`).
 - 2026-11-04 : gardes TWRP OK (root, SM-G973F, `sda14`, 57 671 680 octets) ; image poussée, hash contrôlé ;
   `dd conv=fsync` ; relecture de 25 893 504 octets = `0fbcf3ba…`, **identique**. Seul BOOT a été écrit.
 - **Vérifié (propriétaire)** : le tactile fonctionne, ainsi que le clavier et l'écran de verrouillage.
-  Réglages plante et le centre de contrôle ne s'affiche pas. Suite : `docs/plan-phase4.md`.
+  Réglages plante et le centre de contrôle ne s'affiche pas. Suite : `docs/plans/phase-4.md`.

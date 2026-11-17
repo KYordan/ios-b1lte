@@ -1,6 +1,6 @@
 # B1L-0249 — extensions d'apps : réglage ExtensionKit + base LaunchServices reconstruite (écrit USERDATA, accord du propriétaire)
 
-## Cause (voir `extensions-userdata.md`)
+## Cause (voir `docs/userdata-extensions.md`)
 
 USERDATA relue après 0248 : aucune des 296 extensions des apps (WorldClockWidget, CalendarWidgetExtension, WeatherWidget…)
 n'est dans la base LaunchServices ; pas de `/private/var/preferences/FeatureFlags/Domain/`. fairplayd.H2 est relancé

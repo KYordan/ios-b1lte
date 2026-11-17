@@ -1,6 +1,6 @@
 # Build B1L-0032 : GPU G6 option 1, le serveur d'affichage d'iOS 26 forcé sur OpenGL ES
 
-Date : 2026-11-05. Statut : **installé : SYSTEM (7 blocs relus) et BOOT (relecture `c653a4df…`) ; pas encore testé.** Base : B1L-0031. Plan : `docs/gpu-plan.md` §4c.
+Date : 2026-11-05. Statut : **installé : SYSTEM (7 blocs relus) et BOOT (relecture `c653a4df…`) ; pas encore testé.** Base : B1L-0031. Plan : `docs/gpu/plan.md` §4c.
 
 ## Principe
 

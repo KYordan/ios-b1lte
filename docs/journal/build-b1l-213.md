@@ -8,7 +8,7 @@ Seul changement : `iokit/Kernel/arm/B2LAudio.h`. Bluetooth, Wi-Fi et B2LCPU.cpp 
 - Journal : `amp-otp … result=ok`, `beep-path … | rdma-moving`, `beep played=1 ms=700 …`, `abox-path-restored=1`, `amps-off pins-restored=1`.
 - Coupure : `b2l_audio=5` (sans bip), 4, … ; 6 par défaut.
 - Risques : sens du bit 4 de RDMA CTRL0 inconnu ; SysMMU de l'ABOX supposée en contournement ; pas de firmware de protection des amplis, d'où le volume bas et la durée courte.
-- Détails : `docs/audio-revue-et-plan.md` §10.
+- Détails : `docs/audio/review-and-plan.md` §10.
 
 ## Artefacts
 - BOOT readback : 3bb1295f40c24c119311b26f75df667542e2f5105ca047ee268ad540479c51c9

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* b2l-bluetool-v1.dylib: stand-in for Apple's BlueTool on the S10 (Bluetooth step 3,
- * docs/bluetooth-plan.md section 6). The kernel (B2LBluetooth.cpp) already powers the
+ * docs/bluetooth/plan.md section 6). The kernel (B2LBluetooth.cpp) already powers the
  * BCM4375, loads its patch RAM and sets the address, so the only job left for BlueTool
  * is to answer bluetoothd's XPC requests on com.apple.BlueTool:
  *   {kMsgId: "RunBuiltinScript", kMsgArgs: {script: boot|init|deepsleep, ...}}

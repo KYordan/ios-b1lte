@@ -36,7 +36,7 @@ Apple's open-source XNU kernel running on the Galaxy S10, booting the **unmodifi
 | **SpringBoard & apps** | 🚧 In Progress | TODO | Home screen, Settings, Control Center, Calculator; Safari still freezes, Music and Files hit a Swift assertion |
 | **arm64e emulation** | ✅ Operational | TODO | Instructions the dyld cache uses beyond ARMv8.2 are emulated in the kernel (build 0218) |
 | **Touch** | ✅ Operational | TODO | `sec_ts` probe with deferred retries, delivery into backboardd |
-| **GPU (Metal)** | 🚧 In Progress | TODO | Milestones M1–M6 in [docs/journal/metal-progress.md](docs/journal/metal-progress.md); OpenGL ES kept as a fallback (`b2l_gl=1`) |
+| **GPU (Metal)** | 🚧 In Progress | TODO | Milestones M1–M6 in [docs/gpu/metal-progress.md](docs/gpu/metal-progress.md); OpenGL ES kept as a fallback (`b2l_gl=1`) |
 | **Wi-Fi** | ✅ Operational | TODO | Scan, WPA2 join, DHCP, DNS/TLS, auto-reconnect; Weather still fails (geod) |
 | **Clock** | ✅ Operational | TODO | Time from the PMIC RTC (build 0207) |
 | **Audio** | ⏸️ Parked | TODO | A kernel-generated 1 kHz beep plays on the speaker (build 0213); not wired to CoreAudio yet |

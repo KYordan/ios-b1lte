@@ -6,7 +6,7 @@
   dessinées sans GPU, par le code d'Apple, et elles étaient justes. L'Horloge, le Calendrier, les widgets et une partie des glyphes
   du Centre de contrôle restaient vides.
 - Depuis 0185, puis 0248 (tous les processus), les icônes passent par notre traducteur et notre pilote : elles sont cassées en
-  mouvement, et c'est lent (pipelines d'icônes de ~10 s, 8 processus sur le GPU, voir enquete-icones-lenteur.md).
+  mouvement, et c'est lent (pipelines d'icônes de ~10 s, 8 processus sur le GPU, voir docs/gpu/icon-slowness-investigation.md).
 - C'est aussi un test : si les icônes d'apps redeviennent justes, la casse vient bien de notre chemin GPU.
 
 ## Changement (`userspace/metal/b2l_metal_plugin.m`, sauvegarde `.before-0269`)

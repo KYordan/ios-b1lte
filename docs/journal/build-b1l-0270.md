@@ -3,7 +3,7 @@
 ## Pourquoi (demande du propriétaire, « lier le Bluetooth à iOS »)
 
 - Depuis 0212, le noyau charge le micrologiciel de la BCM4375 puis rééteint la puce. iOS ne la voit pas.
-- Détail et lecture de bluetoothd : `bluetooth-plan.md` §6, état avant reprise : `bluetooth-etat.md`.
+- Détail et lecture de bluetoothd : `docs/bluetooth/plan.md` §6, état avant reprise : `docs/bluetooth/status.md`.
 
 ## Changement (étape 3 rangée le 2026-11-14, réappliquée sur l'état 0269)
 

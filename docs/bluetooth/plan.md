@@ -127,7 +127,7 @@ tort « not confirmed ». Wi-Fi intact.
 
 ## 6. Étape 3 (build suivant) : la puce reste allumée et passe à bluetoothd
 > **En pause (2026-11-14, demande du propriétaire)** : jamais flashée, rangée dans
-> `~/Developer/s10-port/bluetooth-step3-parked/`. État et reprise : `bluetooth-etat.md`.
+> `~/Developer/s10-port/bluetooth-step3-parked/`. État et reprise : `docs/bluetooth/status.md`.
 Lecture de bluetoothd 23G90 (désassemblage, lecture seule) :
 - `getenv("BT_HCI_TRANSPORT")` (0x10029798c), format `transport:pilote:chemin` séparé par `:`. Transports connus :
   USB, H4DS, H4BC, **H4**, H5, APPLEBT, VIRT, PCIE, PCIESW, PCIESUN, APPLEPCIE ; pilotes : USB, **POSIX**, APPLEBT,

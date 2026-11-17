@@ -17,7 +17,7 @@
   - `/dev/hakios-audio` ;
   - publication du plug-in HAL `HakiosAudio.driver` (HakiOS, MIT) depuis SYSTEM:/b2l-audio-v1.
 - Contient aussi le Bluetooth étape 3 de 0270, inchangé. Set Metal v133 inchangé (`--no-libs`).
-- Détails : `audio-revue-et-plan.md` §11.
+- Détails : `docs/audio/review-and-plan.md` §11.
 
 ## Coupe-circuits
 

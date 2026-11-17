@@ -4,7 +4,7 @@
 #
 #   sudo bash set-root-prefs.sh springboard-watchdogs
 #
-# Profiles (one change per build, see docs/plan-phase4.md):
+# Profiles (one change per build, see docs/plans/phase-4.md):
 #   springboard-watchdogs   com.apple.springboard: BKNoWatchdogs = YES (as on the S7)
 #   reduce-transparency     com.apple.Accessibility: EnhancedBackgroundContrastEnabled = YES
 set -euo pipefail

@@ -1,6 +1,6 @@
 # Build B1L-0031 : GPU G5 + G6, Mesa Panfrost et pont EAGL dans backboardd
 
-Date : 2026-11-05. Statut : **installé et testé : chaîne noyau OK, mais CoreAnimation reste sur le CPU** (voir `gpu-plan.md` §4c). BOOT + SYSTEM (ajout de fichiers). Base : B1L-0030. Plan : `docs/gpu-plan.md`.
+Date : 2026-11-05. Statut : **installé et testé : chaîne noyau OK, mais CoreAnimation reste sur le CPU** (voir `docs/gpu/plan.md` §4c). BOOT + SYSTEM (ajout de fichiers). Base : B1L-0030. Plan : `docs/gpu/plan.md`.
 
 ## G5 : Mesa pour iOS 26
 

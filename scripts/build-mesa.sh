@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: BSD-2-Clause
-# GPU step G5 (docs/gpu-plan.md): Mesa 25.0.7's panfrost (Bifrost compiler) as libOSMesa for iOS 26 arm64e,
+# GPU step G5 (docs/gpu/plan.md): Mesa 25.0.7's panfrost (Bifrost compiler) as libOSMesa for iOS 26 arm64e,
 # talking to the kernel's HakiosMali service through HakiOS's libdrm stand-in. Adapted from
 # Scion-Project/hackios-xnu-kernel tools/mk-mesa.sh (its tools/mesa/*.patch and hakios-drm are used unchanged).
 # Output: $B/out/libOSMesa.8.dylib (install name /usr/local/lib/b2l-gl/libOSMesa.8.dylib), exported-gl.txt, gl.xml.

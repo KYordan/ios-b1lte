@@ -8,7 +8,7 @@ Décision du propriétaire : **ne plus investir dans le rendu CPU pour Liquid Gl
 
 | Étape | Build | Résultat |
 | --- | --- | --- |
-| G0 : choix de la voie | doc `gpu-g0.md` | CoreAnimation d'iOS 26 a encore `CA::OGL::GLESContext` (moteur OpenGL ES) → voie EAGL + Mesa Panfrost |
+| G0 : choix de la voie | doc `docs/gpu/g0.md` | CoreAnimation d'iOS 26 a encore `CA::OGL::GLESContext` (moteur OpenGL ES) → voie EAGL + Mesa Panfrost |
 | G1 : lecture de l'ID | B1L-0014 | `GPU_ID 0x72110000` (G76), `SHADER_PRESENT 0x770077` (12 cœurs), AS 0xff, JS 7 |
 | G2a : reset et alimentation | B1L-0016 | soft reset, L2 / tiler / shaders allumés et éteints, domaine `pd-embedded_g3d` déjà allumé au boot |
 | G2b : premier job | B1L-0017 | job WRITE_VALUE par table de pages AArch64 4K sur AS0 : `result=b21cafe5` |

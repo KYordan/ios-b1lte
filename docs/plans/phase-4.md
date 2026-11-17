@@ -101,5 +101,5 @@ et l'installation d'apps est bloquée sur HFS (erreur 166, « 50 candidates, 0 i
 
 - Performances : déplacer `BTAudioHALPlugin` (sur le S7, le CPU au repos passe de >300 % à <25 %), démons qui bouclent,
   traduction arm64e statique de la racine (voir la discussion du 2026-11-04).
-- Phase 5 : Wi-Fi (Broadcom PCIe). Phase 6 : GPU Mali-G76 (`docs/reference-herolte-gpu.md`).
+- Phase 5 : Wi-Fi (Broadcom PCIe). Phase 6 : GPU Mali-G76 (`docs/gpu/herolte-reference.md`).
 - Veille et limite thermique : toujours absentes, ne pas laisser l'appareil allumé sans surveillance.

@@ -1,6 +1,6 @@
 /*
  * B2L (Samsung Galaxy S10, Exynos 9820, Mali-G76 MP12) port of HakiOS's Mali driver, B1L-0029 / GPU step G3
- * (docs/gpu-plan.md). Taken from Scion-Project/hackios-xnu-kernel drivers/gpu/hakios.mali.c under the Apple Public
+ * (docs/gpu/plan.md). Taken from Scion-Project/hackios-xnu-kernel drivers/gpu/hakios.mali.c under the Apple Public
  * Source License 2.0, as that file is. Changes for the S10, all marked "B2L":
  *   - the GPU at 0x18500000 (S10 DTB mali@18500000), GPU_ID >> 16 0x7211 (G76, Bifrost v7, Job Manager);
  *   - pd-embedded_g3d: PMU 0x15860000 + 0x2104 bit 0 (DTB gpu_pmu_status_reg_offset/mask). The domain must be on as

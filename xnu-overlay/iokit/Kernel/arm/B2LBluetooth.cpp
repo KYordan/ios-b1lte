@@ -516,7 +516,7 @@ B2LBluetooth::btThread(void *arg, wait_result_t)
 	uint32_t rate = 0;
 	bool clk = self->clockUsable(&rate);
 	/* The iOS DT is built by XnuLoader (DeviceTree.c) and has no /bluetooth: addresses come from
-	 * the live Android DTB (docs/bluetooth-plan.md), so the node is only reported. */
+	 * the live Android DTB (docs/bluetooth/plan.md), so the node is only reported. */
 	if (self->level >= 2 && clk) {
 		unsigned waited = 0;
 		while (b2l_wifi_fw_state == 0 && waited < 600000) {

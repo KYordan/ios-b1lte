@@ -11,7 +11,7 @@ Build groupé ; le Wi-Fi est inchangé depuis 0210 (relance de geod).
 ## Audio A1 (`iokit/Kernel/arm/B2LAudio.h`), accord du propriétaire le 2026-11-13
 - Les traces passent par `b2l_diag_record`, plus de mélange avec B2L THERMAL.
 - Lecture de DEVID/REVID des deux CS35L40 par I2C simulé sur gph0-6/7 : impulsion de reset sur gph1-1/2, aucune écriture vers les amplis, broches remises à leur état de départ.
-- Journal : `B2L AUDIO: amp-id …`. Coupure : `b2l_audio=1` (A0 seul) ou `b2l_audio=0`. Détails : `docs/audio-revue-et-plan.md` §7.
+- Journal : `B2L AUDIO: amp-id …`. Coupure : `b2l_audio=1` (A0 seul) ou `b2l_audio=0`. Détails : `docs/audio/review-and-plan.md` §7.
 
 ## Artefacts
 - BOOT readback : 959c76038f0beb70eddd0e4d9bf3f71c6417390b4783c682a6aea26d85ea9eca

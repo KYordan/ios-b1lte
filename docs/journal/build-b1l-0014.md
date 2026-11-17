@@ -7,7 +7,7 @@ Date : 2026-11-04. Statut : **construit, pas installé.** BOOT seulement.
   `rx_base` après 500 µs. Le firmware APM reste seul juge des tensions. Mesure PMU `after-dvfs` si envoyé.
 - GPU G1 : lecture de `pd-embedded_g3d` (0x15862100 conf, +4 état, bit 0). Registres Mali (GPU_ID, L2_FEATURES,
   SHADER_PRESENT, TILER/L2/AS/JS_PRESENT) lus **seulement** si le domaine est déjà allumé. Aucune écriture.
-- Décision GPU : voir `gpu-g0.md` (rendu GLES présent dans QuartzCore d'iOS 26).
+- Décision GPU : voir `docs/gpu/g0.md` (rendu GLES présent dans QuartzCore d'iOS 26).
 
 | Artefact | SHA-256 |
 | --- | --- |

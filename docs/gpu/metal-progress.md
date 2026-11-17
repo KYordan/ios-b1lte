@@ -74,7 +74,7 @@ Mis à jour : 2026-11-14, B1L-0238 : plantage de SpringBoard dans le retour du d
 
 ## M6 : l'interface d'iOS rendue par Metal
 
-Plan détaillé et décisions : [plan-vitesse-et-m6.md](plan-vitesse-et-m6.md). Critères de réussite : 40 images/s en défilement sur l'accueil, Liquid Glass correct, plus rapide que le rendu CPU.
+Plan détaillé et décisions : [docs/plans/speed-and-m6.md](../plans/speed-and-m6.md). Critères de réussite : 40 images/s en défilement sur l'accueil, Liquid Glass correct, plus rapide que le rendu CPU.
 
 - [x] M6a : app de test avec un `CAMetalLayer` plein écran, affichée par le serveur actuel (CPU) : présentation réelle, images/s
   - [x] B1L-0079 : **affiché à l'écran** (fond animé, triangles qui tournent) ; 20 à 23 images/s ; par image : encodage 0,17 ms, GPU ~6 ms, attente d'un drawable ~32 ms (le compositeur CPU de backboardd est le goulot)

@@ -1,6 +1,6 @@
 # Build B1L-0029 : GPU G3, service noyau du Mali (port de HakiosMali)
 
-Date : 2026-11-05. Statut : **installé dans BOOT (sda14), relecture `adb07d98…` identique ; pas encore testé.** BOOT seulement. Base : B1L-0028 (le throttle T1 est inclus). Plan : `docs/gpu-plan.md`, étape G3.
+Date : 2026-11-05. Statut : **installé dans BOOT (sda14), relecture `adb07d98…` identique ; pas encore testé.** BOOT seulement. Base : B1L-0028 (le throttle T1 est inclus). Plan : `docs/gpu/plan.md`, étape G3.
 
 ## Origine
 

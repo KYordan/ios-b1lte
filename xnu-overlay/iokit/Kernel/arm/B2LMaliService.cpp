@@ -1,5 +1,5 @@
 /*
- * B2L (Galaxy S10) port of HakiOS's HakiosMali IOKit service, B1L-0029 / GPU step G3 (docs/gpu-plan.md). Taken from
+ * B2L (Galaxy S10) port of HakiOS's HakiosMali IOKit service, B1L-0029 / GPU step G3 (docs/gpu/plan.md). Taken from
  * Scion-Project/hackios-xnu-kernel drivers/gpu/hakios.mali.cpp under the Apple Public Source License 2.0, as that file
  * is. Changes, marked "B2L": the IOSurfaces are this kernel's B2LSurface (pixels at offset 0 of `memory`, no scan-out
  * pool, no client-memory surfaces, no display use counts); the service keeps HakiOS's class names so that its libdrm

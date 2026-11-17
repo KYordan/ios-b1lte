@@ -17,7 +17,7 @@ Le propriétaire a demandé de s'arrêter là pour le Bluetooth, sans build. On 
 ## Étape 3 préparée, jamais flashée (branchement à iOS)
 - Rangée dans `~/Developer/s10-port/bluetooth-step3-parked/` : `B2LBluetooth.cpp` (sha eab8b5a2…), `b2l_exec_bluetooth.h`, `b2l_bt_seed.h`, `b2l_bluetool_payload.h` et `bluetooth-step3-shared.patch` (pour `b2l_userspace_seed.h`, `b2l_exec_graphics_diag.h` et `b2l_amfi_constraint.h`). Pour l'appliquer : copier les fichiers dans `xnu-overlay/` aux mêmes chemins, puis lancer `patch -p0` depuis `beyond2lte-ios/`.
 - Principe : bluetoothd 23G90 ouvre le contrôleur par `BT_HCI_TRANSPORT=H4:POSIX:com.apple.uart.sk.bluetooth,115200`, un kernel control (PF_SYSTEM). Le noyau garde la puce allumée et relaie UART ↔ client. BlueTool est remplacé par une dylib injectée (`/usr/local/lib/b2l-bluetool-v1.dylib`, publiée par la graine, autorisée par la politique dyld AMFI). Adresse synthétique écrite par Write_BD_ADDR.
-- Sources hôte : `userspace/b2l-bluetool.c`, `scripts/build-bluetool-dylib.py`. Plan détaillé : `docs/bluetooth-plan.md` §6.
+- Sources hôte : `userspace/b2l-bluetool.c`, `scripts/build-bluetool-dylib.py`. Plan détaillé : `docs/bluetooth/plan.md` §6.
 - Risques notés : bac à sable de BlueTool ; plantage de bluetoothd à l'extinction (case +0x60, vue par ios-pipa) ; 115200 bauds trop lents pour l'A2DP ; appairages pas encore persistants.
 
 ## Build 0214 interrompu

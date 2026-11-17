@@ -4,7 +4,7 @@ Ensemble : `b2l-metal-v88` (noyau seul, `--no-libs`). Part de 0163 (Wi-Fi), mêm
 
 ## Pourquoi
 
-Voir [clavier-diagnostic.md](clavier-diagnostic.md) : la disponibilité de la dictée change sans arrêt ; à chaque fois, le dock du
+Voir [docs/keyboard-diagnosis.md](../keyboard-diagnosis.md) : la disponibilité de la dictée change sans arrêt ; à chaque fois, le dock du
 clavier recharge ses images sur le thread principal de l'app, et les touches attendent derrière (jusqu'à une minute).
 L'option « Dictée » n'existe pas dans Réglages sur ce port, donc on ne peut pas la couper à la main.
 

@@ -26,7 +26,7 @@ The S10 (`beyond1lte`) port reuses the Galaxy S10+ (`beyond2lte`) work, hence th
 - **An overlay instead of a fork of XNU.** `scripts/prepare-xnu.sh` applies `patches/` and copies `xnu-overlay/` into a pinned Apple checkout. Apple's tree stays a clean, replaceable input; every change of ours is visible in this repository.
 - **arm64e emulation in the kernel.** The iOS 26 dyld cache is built for Apple cores (ARMv8.3+). The Exynos cores trap on those instructions; the kernel decodes and emulates them so Apple's binaries run unmodified.
 - **A native cache on SYSTEM.** USERDATA holds the HFS+ root volume; the translated dyld cache and the GPU libraries go to the SYSTEM partition so they can be updated block by block (`tools/b1l/system-add-fast.sh`) without rewriting the root volume.
-- **Metal on Mesa.** Apple's frameworks expect Metal. `userspace/metal` implements the Metal objects on top of Mesa's panfrost/Bifrost compiler and the `HakiosMali` kernel driver; OpenGL ES remains as a fallback. Overview: [journal/acceleration-gpu.md](journal/acceleration-gpu.md).
+- **Metal on Mesa.** Apple's frameworks expect Metal. `userspace/metal` implements the Metal objects on top of Mesa's panfrost/Bifrost compiler and the `HakiosMali` kernel driver; OpenGL ES remains as a fallback. Overview: [docs/gpu/overview.md](gpu/overview.md).
 
 ## Data that never enters the repository
 

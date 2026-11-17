@@ -3,7 +3,7 @@
 ## Pourquoi
 
 - 0249 a rendu toutes les icônes transparentes (base LaunchServices reconstruite sans le réglage ExtensionKit, EPERM).
-- Le propriétaire refait un USERDATA propre selon ios-pipa (`scripts/prepare-ios-root.py`, `docs/userdata-propre.md`,
+- Le propriétaire refait un USERDATA propre selon ios-pipa (`scripts/prepare-ios-root.py`, `docs/userdata-clean.md`,
   session « Kernel compilation setup pour S10 »). Sur cette racine neuve, `b2l_ext_reset` aurait réécrit `disabled.plist`
   en retirant bluetoothd.
 

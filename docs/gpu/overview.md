@@ -114,7 +114,7 @@ Pistes, dans l'ordre :
 ios-pipa (dépôt MIT, Leo Malik, clone local du 12 novembre) n'est pas une version plus avancée du même chemin :
 
 - **Autre iOS, autre chemin** : son interface accélérée tourne sur iOS 16 (20H392). CoreAnimation y dessine en OpenGL ES par
-  un pont `EAGLServer` (eagl.c, repris de HackiOS, MIT). **iOS 26 n'a plus EAGLServer** (B1L-0031, `gpu-plan.md` 4c) : CoreAnimation,
+  un pont `EAGLServer` (eagl.c, repris de HackiOS, MIT). **iOS 26 n'a plus EAGLServer** (B1L-0031, `docs/gpu/plan.md` 4c) : CoreAnimation,
   RenderBox et le verre liquide n'ont plus que Metal. On ne peut pas reprendre ce pont.
 - **Ses icônes sont dessinées par le processeur**, pas par le GPU : il n'a pas les shaders RenderBox d'iOS 26 à traduire.
 - Leçons utiles pour nous, tirées de son `userland/metal/README.md` (pilote hakios-metal pour Adreno) :

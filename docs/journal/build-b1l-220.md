@@ -27,7 +27,7 @@ puis le système gèle (retour à TWRP). Log : `beyond2lte-ios/out/logs/0220-saf
 - Les 300 lignes écrites d'avance sont **toutes** des émulations PAC (RETAB, BRAA, AUTIB…) dans **libcorecrypto**.
   Glissement du cache 0x1400c000, sous-cache .31. Il s'agit surtout de `ccdrbg_generate_internal`, `update` et
   `ccrng_process_init` : le générateur aléatoire, appelé par chaque processus WebKit. corecrypto n'est pas traduit,
-  voir `plan-corecrypto.md`, d'où un trap par instruction PAC. C'est lent, mais ce n'est pas le gel.
+  voir `docs/plans/corecrypto.md`, d'où un trap par instruction PAC. C'est lent, mais ce n'est pas le gel.
 - Aucun appel GPU ou IOSurface n'a été journalisé, ni aucun trap de cache. Le gel est arrivé juste après la 300e
   ligne, donc sans trace écrite d'avance.
 - WebContent 380 a été tué par libxpc (namespace 7) : il était probablement trop lent, à cause des attentes de 40 ms.

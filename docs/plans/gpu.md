@@ -1,6 +1,6 @@
 # GPU acceleration plan — Mali-G76 MP12 (Exynos 9820), iOS 26 on Galaxy S10
 
-Status 2026-11-04: **G0 decided (GLES renderer present, see docs/gpu-g0.md); G1 passed in B1L-0015** (G3D domain already on, GPU_ID 0x72110000 Mali-G76, 12 shader cores, 8 AS, 3 job slots). All rendering is CPU
+Status 2026-11-04: **G0 decided (GLES renderer present, see docs/gpu/g0.md); G1 passed in B1L-0015** (G3D domain already on, GPU_ID 0x72110000 Mali-G76, 12 shader cores, 8 AS, 3 job slots). All rendering is CPU
 (QuartzCore software → IOSurface → `B2LFramebuffer` copy to scanout). `[VERIFY]` = to prove on the device or in the image.
 
 Rule: each stage is a separate build (`docs/journal/build-b1l-XXXX.md`), is useful on its own, and has a pass/fail gate.
@@ -30,7 +30,7 @@ translation (`b1l-tools/static-translate`), which has priority for overall fluid
    and PanVK (Vulkan on Bifrost). Write down the exact Mesa version and its feature level.
 3. Record the S10's GPU DVFS table and voltages (Samsung kernel source and DTB) for G4. Never guess a voltage.
 
-Gate: a written decision with evidence, in `docs/gpu-g0.md`.
+Gate: a written decision with evidence, in `docs/gpu/g0.md`.
 
 ## G1 — Power the G76 and read its ID (kernel, BOOT only)
 

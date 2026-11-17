@@ -1,6 +1,6 @@
 # Carte des partitions — Galaxy S10 SM-G973F (beyond1lte)
 
-Données mesurées depuis TWRP root (`docs/s10-device-facts.md`).
+Données mesurées depuis TWRP root (`docs/device-facts.md`).
 
 ## Partitions où l'on peut écrire (avec ce kit)
 

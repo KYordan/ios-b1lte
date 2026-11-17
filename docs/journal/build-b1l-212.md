@@ -13,7 +13,7 @@ Build groupé (OK du propriétaire : étapes audio regroupées). Le Wi-Fi est in
 - A3 : réglage des CS35L40 par I2C, AMP_EN=0, en sourdine.
 - A4 : horloge UAIF1, puis les amplis allumés et éteints ; tout est restauré sauf PMU 0x1920 bit 11. Aucun son.
 - Journal : `abox-verdict`, `amp-prep`, `amp-power`, `uaif1-verdict`, `amps-off pins-restored=1`.
-- Coupure : `b2l_audio` = 4 (sans A4), 3, 2, 1, 0 ; 5 par défaut. Détails : `docs/audio-revue-et-plan.md` §8–9.
+- Coupure : `b2l_audio` = 4 (sans A4), 3, 2, 1, 0 ; 5 par défaut. Détails : `docs/audio/review-and-plan.md` §8–9.
 
 ## Données copiées (lecture seule, hors git)
 - `~/Developer/s10-port/vendor-audio/` : calliope*, cs35l40-*.wmfw/.bin/-calib.bin et mixer_paths.xml, depuis vendor (erofs, monté en ro dans TWRP puis démonté).

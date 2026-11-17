@@ -93,7 +93,7 @@ D'après `engineer.md`, `metal-progress.md` et les journaux 0136-0139 :
 | `PLAN.md` | Plan complet du port : stratégie, phases 0-7, récupération de l'iOS 26, matériel, risques, vérification. |
 | `engineer.md` | Brief d'ingénieur : cible, état actuel, politique de stockage, environnement de build, workflow, priorités, diagnostics. |
 | `gpu.md` | Plan d'accélération GPU Mali-G76 (étapes G0-G7). |
-| `docs/` | Journaux de build détaillés (`build-b1l-XXXX.md`), captures d'écran, plans GPU, plan de phase 4, faits mesurés du S10 (`s10-device-facts.md`), référence GPU S7 (`reference-herolte-gpu.md`). |
+| `docs/` | Journaux de build détaillés (`build-b1l-XXXX.md`), captures d'écran, plans GPU, plan de phase 4, faits mesurés du S10 (`docs/device-facts.md`), référence GPU S7 (`docs/gpu/herolte-reference.md`). |
 | `DOCUMENTATION_PROJET_PART{1,2,3}.md` | Ce document (présentation, build, sécurité, journaux, GPU, référence). |
 
 ---

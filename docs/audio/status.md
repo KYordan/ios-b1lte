@@ -13,7 +13,7 @@ Le propriétaire a demandé de s'arrêter là pour l'audio, sans build. On y rev
 ## Étapes et journal (build par build)
 - 0210 A0 : lecture seule. 0211 A1 : identité des amplis. 0212 A2–A4 : ABOX lu, amplis réglés, cadencés par UAIF1. 0213 A5 : le bip.
 - Journal : `grep -a "B2L AUDIO"` dans `beyond2lte-ios/out/logs/021x-boot.txt`.
-- Détails techniques complets : `docs/audio-revue-et-plan.md` §5 à §10.
+- Détails techniques complets : `docs/audio/review-and-plan.md` §5 à §10.
 
 ## Ce qui est installé (dans 0213)
 - `iokit/Kernel/arm/B2LAudio.h` (sha 5112968d…), appelé par `b2l_audio_probe()` dans `B2LCPU.cpp` juste après `b2l_gpu_probe()`.

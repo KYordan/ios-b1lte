@@ -58,7 +58,7 @@
 
 ---
 
-### 12. Plan GPU (Mali-G76 MP12) — `docs/gpu-plan.md`
+### 12. Plan GPU (Mali-G76 MP12) — `docs/gpu/plan.md`
 
 Décision du propriétaire : **ne plus investir dans le rendu CPU pour Liquid Glass et les effets ; tout passe par le GPU.**
 
@@ -74,7 +74,7 @@ CoreAnimation (backboardd, CA::OGL::GLESContext)
 
 | Étape | Contenu | Statut |
 |-------|---------|--------|
-| G0 | Choix de la voie (GLES présent dans iOS 26) | Fait (`gpu-g0.md`) |
+| G0 | Choix de la voie (GLES présent dans iOS 26) | Fait (`docs/gpu/g0.md`) |
 | G1 | Lecture de l'ID GPU | Fait (B1L-0014/0015) |
 | G2a | Reset + alimentation des cœurs | Fait (B1L-0016) |
 | G2b | Premier job GPU | Fait (B1L-0017) |
@@ -107,7 +107,7 @@ Décidé après B1L-0042 : quitter GLES pour Metal car le serveur d'affichage et
 
 ---
 
-### 14. Référence GPU du port S7 — `docs/reference-herolte-gpu.md`
+### 14. Référence GPU du port S7 — `docs/gpu/herolte-reference.md`
 
 Le port Galaxy S7 (`wardevsa/ios-a5xelte`, iOS 16.7.16, Mali-T880 Midgard) sert de référence :
 - Chaîne : CoreAnimation (GLES) → pont EAGL → OSMesa + Mesa Panfrost → libdrm de remplacement (`herodrm.c`) → service kernel HeroGPU.
@@ -117,7 +117,7 @@ Le port Galaxy S7 (`wardevsa/ios-a5xelte`, iOS 16.7.16, Mali-T880 Midgard) sert 
 
 ---
 
-### 15. Faits mesurés sur le S10 — `docs/s10-device-facts.md`
+### 15. Faits mesurés sur le S10 — `docs/device-facts.md`
 
 | Élément | Valeur |
 |---------|--------|

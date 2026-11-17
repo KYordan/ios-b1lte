@@ -9,11 +9,11 @@ Build groupé (OK du propriétaire) : trois changements indépendants, chacun av
 - Autre piste vue : `weatherd` est tué par jetsam (InactiveHard 8 Mo, 35 Mo utilisés).
 
 ## Bluetooth étape 1
-- Nouveau `iokit/Kernel/arm/B2LBluetooth.cpp`, plus une ligne dans `iokit/conf/files` et une dans `iokit/KernelConfigTables.cpp`. Voir `docs/bluetooth-plan.md`.
+- Nouveau `iokit/Kernel/arm/B2LBluetooth.cpp`, plus une ligne dans `iokit/conf/files` et une dans `iokit/KernelConfigTables.cpp`. Voir `docs/bluetooth/plan.md`.
 - Journal : `B2L BLUETOOTH`. Coupure : `b2l_bt=0` (rien) ou `b2l_bt=1` (lecture seule).
 
 ## Audio A0 (lecture seule)
-- Nouveau `iokit/Kernel/arm/B2LAudio.h`, plus deux lignes dans `B2LCPU.cpp`. Voir `docs/audio-revue-et-plan.md` §5.
+- Nouveau `iokit/Kernel/arm/B2LAudio.h`, plus deux lignes dans `B2LCPU.cpp`. Voir `docs/audio/review-and-plan.md` §5.
 - Journal : `B2L AUDIO`, avec une ligne `verdict` à la fin. Coupure : `b2l_audio=0`.
 
 ## Artefacts
