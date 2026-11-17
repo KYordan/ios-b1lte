@@ -1,0 +1,46 @@
+--- a/osfmk/arm/pmap/pmap.c
++++ b/osfmk/arm/pmap/pmap.c
+@@ -114,6 +114,12 @@
+ #if HIBERNATION
+ #include <IOKit/IOHibernatePrivate.h>
+ #endif /* HIBERNATION */
++#if defined(B2L)
++#include <pexpert/arm64/b2l_ram.h>
++#define B2L_IS_OWNED_RAM(pa) (b2l_managed_pa((unsigned long long)(pa)) != 0)
++#else
++#define B2L_IS_OWNED_RAM(pa) 0
++#endif
+ 
+ #define PMAP_L1_MAX_ENTRY (ARM_PTE_T1_REGION_MASK(TCR_EL1_BOOT) >> ARM_TT_L1_SHIFT)
+ #define PMAP_ROOT_ALLOC_SIZE ((PMAP_L1_MAX_ENTRY + 1) * sizeof(tt_entry_t))
+@@ -6062,7 +6068,7 @@
+ 		pte |= ARM_PTE_NX | ARM_PTE_PNX;
+ 		break;
+ 	case VM_WIMG_POSTED_REORDERED:
+-		if (is_dram_addr(pa)) {
++		if (is_dram_addr(pa) || B2L_IS_OWNED_RAM(pa)) {
+ 			pte = ARM_PTE_ATTRINDX(CACHE_ATTRINDX_POSTED_COMBINED_REORDERED);
+ 		} else {
+ 			pte = ARM_PTE_ATTRINDX(CACHE_ATTRINDX_POSTED_REORDERED);
+@@ -6079,7 +6085,10 @@
+ 		pte |= ARM_PTE_NX | ARM_PTE_PNX;
+ 		break;
+ 	case VM_WIMG_WCOMB:
+-		if (is_dram_addr(pa)) {
++		/* B1L-0040: every RAM range the kernel owns is DRAM (gDramBase/gDramSize name only the loader's primary
++		 * one); a write-combined mapping of low-bank RAM was device memory, and Mesa's unaligned stores into a
++		 * GPU buffer took alignment faults */
++		if (is_dram_addr(pa) || B2L_IS_OWNED_RAM(pa)) {
+ 			pte = ARM_PTE_ATTRINDX(CACHE_ATTRINDX_WRITECOMB);
+ 		} else {
+ #if HAS_FEAT_XS
+@@ -7288,7 +7297,8 @@
+ pmap_sync_page_attributes_phys(
+ 	ppnum_t pp)
+ {
+-	flush_dcache((vm_offset_t) (pp << PAGE_SHIFT), PAGE_SIZE, TRUE);
++	/* B1L-0040: ptoa(), not pp << PAGE_SHIFT on the 32-bit ppnum_t, which cut 0x8f1e1c000 down to 0xf1e1c000 */
++	flush_dcache((vm_offset_t) ptoa(pp), PAGE_SIZE, TRUE);
+ }
+ 
+ #if CONFIG_COREDUMP

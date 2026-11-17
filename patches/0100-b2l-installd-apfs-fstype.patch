@@ -1,0 +1,27 @@
+diff --git a/bsd/vfs/vfs_subr.c b/bsd/vfs/vfs_subr.c
+index 5b038ca9..46b9297d 100644
+--- a/bsd/vfs/vfs_subr.c
++++ b/bsd/vfs/vfs_subr.c
+@@ -11432,11 +11432,22 @@ vfs_getextflags(mount_t mp)
+ 	return flags_ext;
+ }
+ 
++#if defined(ARM64_BOARD_CONFIG_B2L)
++#include "b2l_fstype.h"
++#endif
+ char *
+ vfs_getfstypenameref_locked(mount_t mp, size_t *lenp)
+ {
+ 	char *name;
+ 
++#if defined(ARM64_BOARD_CONFIG_B2L)
++	if (b2l_fstype_spoof_apfs(mp)) {
++		if (lenp != NULL) {
++			*lenp = strlen(b2l_apfs_name);
++		}
++		return __DECONST(char *, b2l_apfs_name);
++	}
++#endif
+ 	if (mp->mnt_kern_flag & MNTK_TYPENAME_OVERRIDE) {
+ 		name = mp->fstypename_override;
+ 	} else {

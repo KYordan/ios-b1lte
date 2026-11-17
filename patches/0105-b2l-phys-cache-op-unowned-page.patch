@@ -1,0 +1,77 @@
+--- a/osfmk/arm/caches.c
++++ b/osfmk/arm/caches.c
+@@ -54,6 +54,44 @@
+ #define BWOpDone 3
+ 
+ #ifndef __ARM_COHERENT_IO__
++
++#if defined(B2L)
++/*
++ * B1L-0038: a physical cache operation on a page the kernel does not own (a reserved hole between the B2L RAM ranges,
++ * e.g. 0xf05a4000) panicked in phystokv_range(): copypv(cppvPsnk | cppvFsnk), IOMemoryDescriptor::writeBytes()'s, copies
++ * through a CPU copy window for such a page and then flushes it by physical address. The flush goes through the same
++ * kind of window here, as dcache_incoherent_io_flush64() already does; the first callers are said.
++ */
++static unsigned b2l_unowned_cache_said;
++static vm_size_t
++b2l_unowned_cache_op(pmap_paddr_t paddr, unsigned length, bool clean_only, uintptr_t caller)
++{
++	vm_size_t count = PAGE_SIZE - (paddr & PAGE_MASK);
++	unsigned int wimg_bits, index;
++	vm_offset_t vaddr;
++
++	if (count > length) {
++		count = length;
++	}
++	if (b2l_unowned_cache_said < 8) {
++		b2l_unowned_cache_said++;
++		printf("B2L CACHE: %s of PA 0x%llx (%u bytes), not the kernel's RAM, through a copy window; caller 0x%lx (unslid)\n",
++		    clean_only ? "clean" : "flush", (unsigned long long)paddr, length, (unsigned long)VM_KERNEL_UNSLIDE(caller));
++	}
++	wimg_bits = pmap_cache_attributes((ppnum_t)(paddr >> PAGE_SHIFT));
++	mp_disable_preemption();
++	index = pmap_map_cpu_windows_copy((ppnum_t)(paddr >> PAGE_SHIFT), VM_PROT_READ | VM_PROT_WRITE, wimg_bits);
++	vaddr = pmap_cpu_windows_copy_addr(cpu_number(), index) | (paddr & PAGE_MASK);
++	if (clean_only) {
++		CleanPoC_DcacheRegion(vaddr, (unsigned)count);
++	} else {
++		FlushPoC_DcacheRegion(vaddr, (unsigned)count);
++	}
++	pmap_unmap_cpu_windows_copy(index);
++	mp_enable_preemption();
++	return count;
++}
++#endif
+ 
+ TUNABLE(bool, up_style_idle_exit, "up_style_idle_exit", false);
+ 
+@@ -72,6 +110,14 @@
+ 		if (phys) {
+ 			count = length;
+ 			paddr = CAST_DOWN(pmap_paddr_t, addr);
++#if defined(B2L)
++			if (!pmap_valid_address(paddr)) {
++				count = b2l_unowned_cache_op(paddr, length, false, (uintptr_t)__builtin_return_address(0));
++				addr += count;
++				length -= count;
++				continue;
++			}
++#endif
+ 			vaddr = phystokv_range(paddr, &count);
+ 		} else {
+ 			paddr = kvtophys(addr);
+@@ -106,6 +152,14 @@
+ 		if (phys) {
+ 			count = length;
+ 			paddr = CAST_DOWN(pmap_paddr_t, addr);
++#if defined(B2L)
++			if (!pmap_valid_address(paddr)) {
++				count = b2l_unowned_cache_op(paddr, length, true, (uintptr_t)__builtin_return_address(0));
++				addr += count;
++				length -= count;
++				continue;
++			}
++#endif
+ 			vaddr = phystokv_range(paddr, &count);
+ 		} else {
+ 			paddr = kvtophys(addr);

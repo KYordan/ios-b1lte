@@ -1,0 +1,206 @@
+/* SPDX-License-Identifier: BSD-2-Clause
+ * Boot menu, UEFI side: keys from the firmware keypad (Silicium KeypadDxe on beyond1lte: volume up = SCAN_UP,
+ * volume down = SCAN_DOWN, power = Enter on release, Bixby = Esc), the screen drawn by BootMenuDraw.c and blitted
+ * to the GOP (text console as a fallback), actions through the runtime services. The decisions themselves are in BootMenu.c (host tested).
+ *
+ * Nothing here writes a partition. The remembered choice is a UEFI variable: on this firmware the variable store
+ * is emulated in RAM (SiliciumPkg PcdEmuVariableNvModeEnable=TRUE), so it is kept across a return to the menu, not
+ * across a reboot.
+ */
+#include <Uefi.h>
+#include <Library/BaseLib.h>
+#include <Library/IoLib.h>
+#include <Library/UefiBootServicesTableLib.h>
+#include <Library/UefiRuntimeServicesTableLib.h>
+#include <Library/MemoryAllocationLib.h>
+#include <Library/UefiLib.h>
+#include <Protocol/GraphicsOutput.h>
+#include "BootMenu.h"
+#include "BootMenuEfi.h"
+#include "BootMenuDraw.h"
+
+#ifndef B2L_MENU_TIMEOUT_S
+#define B2L_MENU_TIMEOUT_S 5        /* build option: -D B2L_MENU_TIMEOUT_S=n, 0 = no automatic boot */
+#endif
+#define B2L_MENU_PROBE_MS 700u      /* a volume key held at start repeats after 500 ms (KeypadDeviceLib) */
+
+/* Exynos 9820 PMU (firmware MemoryMapLib "PMU" 0x15860000, mapped as device memory). Samsung's kernel asks the
+ * bootloader for recovery by writing INFORM3 = 0x12345674 (drivers/samsung/sec_reboot.c, SEC_RESET_REASON_RECOVERY)
+ * and SYSIP_DAT0 = 0xFF (drivers/soc/samsung/exynos-reboot.c, REBOOT_MODE_RECOVERY) before the software reset.
+ * NOT YET TESTED ON THE PHONE: which of the two the S10 bootloader reads has not been checked. */
+#define B2L_PMU_BASE          0x15860000ULL
+#define B2L_PMU_INFORM3       0x080C
+#define B2L_PMU_SYSIP_DAT0    0x0810
+/* exynos-reboot.c (non-9810 path): clear RST_STAT, then SWRESET = 1 << 1. Silicium's S5E9820 ResetSystemLib writes
+ * 1 (the 9810 trigger bit), which does nothing on the S10: both reboot entries said "Reboot failed" in B1L-0216. */
+#define B2L_PMU_RST_STAT      0x0404
+#define B2L_PMU_SWRESET       0x3A00
+#define B2L_SWRESET_TRIGGER   (1u << 1)
+#define B2L_RESET_RECOVERY    0x12345674u
+#define B2L_REBOOT_RECOVERY   0xFFu
+
+STATIC EFI_GUID mB2lMenuGuid = { 0x78da37fb, 0x7929, 0x467d, { 0xbc, 0xd8, 0xd3, 0x44, 0x2c, 0x84, 0x3d, 0x39 } };
+STATIC CONST CHAR16 *mItems[B2L_MENU_COUNT] = {
+    L"Boot iOS", L"Stay here (don't boot)", L"Reboot to recovery (untested)", L"Reboot",
+};
+STATIC EFI_GRAPHICS_OUTPUT_PROTOCOL *mGop;
+STATIC UINT32 *mPixels;     /* back buffer, one GOP mode in size, kept for the loader's lifetime */
+
+STATIC UINT64
+NowMs(VOID)
+{
+    UINT64 Count, Frequency;
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(Count));
+    __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(Frequency));
+    return Frequency ? DivU64x64Remainder(Count, Frequency / 1000 ? Frequency / 1000 : 1, NULL) : 0;
+}
+
+STATIC enum b2l_menu_key
+ReadKey(VOID)
+{
+    EFI_INPUT_KEY Key;
+    if (gST->ConIn == NULL || EFI_ERROR(gST->ConIn->ReadKeyStroke(gST->ConIn, &Key))) return B2L_KEY_NONE;
+    if (Key.ScanCode == SCAN_UP) return B2L_KEY_UP;
+    if (Key.ScanCode == SCAN_DOWN) return B2L_KEY_DOWN;
+    if (Key.UnicodeChar == CHAR_CARRIAGE_RETURN) return B2L_KEY_SELECT;
+    if (Key.ScanCode == SCAN_ESC) return B2L_KEY_BACK;
+    return B2L_KEY_NONE;    /* SCAN_LEFT/RIGHT: the keypad's power+volume long-press combos, unused here */
+}
+
+/* Waits at most Ms for a key; returns at once when one arrives. */
+STATIC enum b2l_menu_key
+WaitKey(EFI_EVENT Timer, UINTN Ms)
+{
+    EFI_EVENT Events[2];
+    UINTN Count = 0, Index;
+    enum b2l_menu_key Key = ReadKey();
+    if (Key != B2L_KEY_NONE) return Key;
+    if (gST->ConIn != NULL) Events[Count++] = gST->ConIn->WaitForKey;
+    if (Timer == NULL || EFI_ERROR(gBS->SetTimer(Timer, TimerRelative, (UINT64)Ms * 10000))) {
+        gBS->Stall(Ms * 1000);
+        return ReadKey();
+    }
+    Events[Count++] = Timer;
+    gBS->WaitForEvent(Count, Events, &Index);
+    return ReadKey();
+}
+
+/* Graphics when the GOP is there and the back buffer fits in memory; otherwise the firmware text console. */
+STATIC VOID
+Draw(CONST struct b2l_menu *Menu, UINT64 Now, CONST CHAR8 *Note, CONST CHAR8 *Status)
+{
+    unsigned Left = b2l_menu_seconds_left(Menu, Now);
+    if (mPixels == NULL && mGop == NULL &&
+        !EFI_ERROR(gBS->LocateProtocol(&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **)&mGop)) &&
+        mGop->Mode && mGop->Mode->Info && mGop->Mode->Info->PixelFormat == PixelBlueGreenRedReserved8BitPerColor)
+        mPixels = AllocatePool((UINTN)mGop->Mode->Info->HorizontalResolution * mGop->Mode->Info->VerticalResolution * 4);
+    if (mPixels) {
+        UINT32 W = mGop->Mode->Info->HorizontalResolution, H = mGop->Mode->Info->VerticalResolution;
+        struct b2l_menu_view View = { Menu->selected, Left, B2L_MENU_TIMEOUT_S, Status, Note };
+        b2l_menu_render(mPixels, W, W, H, &View);
+        if (!EFI_ERROR(mGop->Blt(mGop, (EFI_GRAPHICS_OUTPUT_BLT_PIXEL *)mPixels, EfiBltBufferToVideo, 0, 0, 0, 0, W, H, 0)))
+            return;
+    }
+    gST->ConOut->ClearScreen(gST->ConOut);
+    Print(L"iOS 26 - Galaxy S10\r\n\r\n");
+    for (UINTN I = 0; I < B2L_MENU_COUNT; I++)
+        Print(L" %s %s\r\n", I == Menu->selected ? L">" : L" ", mItems[I]);
+    Print(L"\r\nVolume +/-: move    Power: select    Bixby: stop the timer\r\n");
+    if (Status) Print(L"%a\r\n", Status);
+    else if (Left) Print(L"Booting iOS in %u s\r\n", Left);
+    if (Note) Print(L"\r\n%a\r\n", Note);
+}
+
+STATIC VOID
+Remember(UINT8 Item)
+{
+    /* Best effort: a failure only means the cursor starts on "Boot iOS" next time. */
+    (VOID)gRT->SetVariable(L"B2LBootMenuItem", &mB2lMenuGuid,
+                           EFI_VARIABLE_NON_VOLATILE | EFI_VARIABLE_BOOTSERVICE_ACCESS, sizeof(Item), &Item);
+}
+
+STATIC unsigned
+Remembered(VOID)
+{
+    UINT8 Item = B2L_MENU_COUNT;
+    UINTN Size = sizeof(Item);
+    if (EFI_ERROR(gRT->GetVariable(L"B2LBootMenuItem", &mB2lMenuGuid, NULL, &Size, &Item)) || Size != sizeof(Item))
+        return B2L_MENU_COUNT;
+    return Item;
+}
+
+STATIC VOID
+Reset(BOOLEAN Recovery)
+{
+    if (Recovery) {
+        MmioWrite32(B2L_PMU_BASE + B2L_PMU_INFORM3, B2L_RESET_RECOVERY);
+        MmioWrite32(B2L_PMU_BASE + B2L_PMU_SYSIP_DAT0, B2L_REBOOT_RECOVERY);
+    }
+    MmioWrite32(B2L_PMU_BASE + B2L_PMU_RST_STAT, 0);
+    MmioWrite32(B2L_PMU_BASE + B2L_PMU_SWRESET, B2L_SWRESET_TRIGGER);
+    gBS->Stall(500 * 1000);
+    gRT->ResetSystem(EfiResetCold, EFI_SUCCESS, 0, NULL);   /* fallback: the firmware's own reset */
+    /* Still here: neither reset took. Say so instead of hanging silently. */
+    Print(L"\r\nReboot failed. Hold Power to switch the phone off.\r\n");
+}
+
+/* Volume up held at start: menu with recovery preselected. Volume down held: menu without countdown. */
+STATIC enum b2l_menu_start
+ProbeStart(EFI_EVENT Timer)
+{
+    UINT64 Until = NowMs() + B2L_MENU_PROBE_MS;
+    while (NowMs() < Until) {
+        enum b2l_menu_key Key = WaitKey(Timer, 50);
+        if (Key == B2L_KEY_UP) return B2L_START_FORCE_RECOVERY;
+        if (Key == B2L_KEY_DOWN) return B2L_START_FORCE_MENU;
+    }
+    return B2L_START_NORMAL;
+}
+
+B2L_BOOT_CHOICE
+B2lBootMenu(CONST CHAR8 *Note, BOOLEAN NoCountdown)
+{
+    EFI_EVENT Timer = NULL;
+    struct b2l_menu Menu;
+    B2L_BOOT_CHOICE Choice = B2L_CHOICE_BOOT;
+
+    if (gST->ConIn == NULL || gST->ConOut == NULL) return B2L_CHOICE_BOOT;   /* no keypad: old behaviour */
+    /* BDS arms a 5-minute watchdog for applications; "Stay here" must not end in a firmware reset. */
+    (VOID)gBS->SetWatchdogTimer(0, 0, 0, NULL);
+    if (EFI_ERROR(gBS->CreateEvent(EVT_TIMER, 0, NULL, NULL, &Timer))) Timer = NULL;
+
+    enum b2l_menu_start Start = NoCountdown ? B2L_START_FORCE_MENU : ProbeStart(Timer);
+    b2l_menu_init(&Menu, Remembered(), B2L_MENU_TIMEOUT_S * 1000u, Start, NowMs());
+    Draw(&Menu, NowMs(), Note, NULL);
+    for (;;) {
+        enum b2l_menu_key Key = WaitKey(Timer, 100);
+        UINT64 Now = NowMs();
+        enum b2l_menu_action Action = b2l_menu_event(&Menu, Key, Now);
+        if (Action == B2L_ACT_NONE) continue;
+        if (Action == B2L_ACT_REDRAW) { Draw(&Menu, Now, Note, NULL); continue; }
+        Remember((UINT8)Menu.selected);
+        if (Action == B2L_ACT_BOOT) { Choice = B2L_CHOICE_BOOT; break; }
+        if (Action == B2L_ACT_HOLD) {
+            Draw(&Menu, Now, Note, "Not booting. Press any key for the menu.");
+            while (WaitKey(Timer, 1000) == B2L_KEY_NONE) {}
+            b2l_menu_init(&Menu, Menu.selected, 0, B2L_START_FORCE_MENU, NowMs());
+            Draw(&Menu, NowMs(), Note, NULL);
+            continue;
+        }
+        Draw(&Menu, Now, Note, Action == B2L_ACT_RECOVERY ? "Rebooting to recovery..." : "Rebooting...");
+        Reset(Action == B2L_ACT_RECOVERY);
+        b2l_menu_init(&Menu, Menu.selected, 0, B2L_START_FORCE_MENU, NowMs());
+    }
+    if (Timer) gBS->CloseEvent(Timer);
+    gST->ConOut->ClearScreen(gST->ConOut);
+    return Choice;
+}
+
+VOID
+B2lBootFailed(EFI_STATUS Status)
+{
+    Print(L"\r\nBoot failed: %r. The messages above say where.\r\n", Status);
+    if (gST->ConIn == NULL) return;
+    Print(L"Press any key to return to the menu.\r\n");
+    while (WaitKey(NULL, 1000) == B2L_KEY_NONE) {}
+}

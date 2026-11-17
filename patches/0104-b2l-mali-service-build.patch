@@ -1,0 +1,11 @@
+B1L-0029 (GPU G3): build the HakiOS-derived Mali core and IOKit service.
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@
+ bsd/dev/b2l_ufs_transport.c		optional b2l
++bsd/dev/b2l_mali_core.c			optional b2l
+--- a/iokit/conf/files
++++ b/iokit/conf/files
+@@
+ iokit/Kernel/arm/B2LSurface.cpp optional iokitcpp b2l
++iokit/Kernel/arm/B2LMaliService.cpp optional iokitcpp b2l
