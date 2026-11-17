@@ -91,3 +91,18 @@ scripts/test-loader.sh
 
 The tests use AddressSanitizer and UndefinedBehaviorSanitizer. They validate
 the parser's malformed-image handling; they do not simulate XNU execution.
+
+## Build and flash loop (`tools/b1l`)
+
+`tools/b1l/b1l-build.sh NNNN SET [--mesa] [--no-libs] [--no-kernel]` runs one
+whole build: Mesa (optional), the Metal libraries into `build-metal/SET`, the
+kernel, the BOOT image, the changed 4 MiB blocks of SYSTEM, then BOOT. Each
+stage is written to `$S10_PORT/progress/NNNN.status`, which
+`tools/b1l/watch-build.sh` displays live.
+
+The scripts read their locations from environment variables whose defaults
+match the original work folder; see [.env.example](../.env.example):
+`S10_PORT` (work folder: IPSW, build outputs, device data), `B2L_ROOT` (this
+repository, default `$S10_PORT/beyond2lte-ios`), `ADB`, `B2L_SERIAL` and
+`PY_ENV`. Every write to the phone is guarded (model check, exact partition
+size, hash) and read back.
