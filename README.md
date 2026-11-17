@@ -157,7 +157,7 @@ TODO: complete from the `PE_parse_boot_argn` calls in `xnu-overlay/` and the com
 | HakiOS | https://github.com/oosexgang/hakios-xnu-kernel | Mali kernel driver, Metal/EAGL bridges, WLAN and other ported drivers | MIT (kernel parts APSL 2.0) |
 | Scion (HakiOS Metal driver) | TODO: link (commit `a6f4bc38`) | Base of `userspace/metal/scion` | MIT |
 | fiio-jm21-xnu | https://github.com/soumarcelino/fiio-jm21-xnu | HakiOS AudioServerPlugIn in `userspace/audio-plugin` | MIT |
-| ios-pipa | https://github.com/nishant713/ios-pipa | Root-volume settings in `scripts/prepare-ios-root.py`; README layout | MIT |
+| ios-pipa | https://github.com/nishant713/ios-pipa | Root-volume settings in `scripts/prepare-ios-root.py`, WPA code in `b2l_wpa.c`; README layout | MIT |
 | ios-a5xelte | https://github.com/wardevsa/ios-a5xelte | Idea of the SpringBoard injection library | TODO |
 | beyond2lte-ios | https://github.com/orhunnx/beyond2lte-ios | Galaxy S10+ port this repository is derived from | TODO (files carry BSD-2-Clause) |
 | beyond2lte-uefi | https://github.com/orhunnx/beyond2lte-uefi | UEFI firmware that hosts `XnuLoader` | TODO |
@@ -194,7 +194,7 @@ This project builds upon work from the mobile Darwin / XNU community:
 
 ## License
 
-- Code written for this project: **TODO, license to be chosen by the owner** (most files already carry `SPDX-License-Identifier: BSD-2-Clause`).
+- Code written for this project is distributed under the [BSD 2-Clause License](LICENSE).
 - Kernel patches and the XNU files in `xnu-overlay/` keep Apple's notices and are distributed under the [Apple Public Source License 2.0](https://opensource.apple.com/apsl/).
 - Third-party code keeps its own license; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - iOS, SpringBoard, firmware and every Apple or Samsung binary belong to their owners and are **not** distributed in this repository.

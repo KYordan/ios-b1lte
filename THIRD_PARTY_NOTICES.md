@@ -14,7 +14,7 @@ APSL 2.0 terms that apply here: Apple's notices stay in each file; modified file
 - **HakiOS** — Copyright (c) 2025-2026 the HakiOS authors, https://github.com/oosexgang/hakios-xnu-kernel. Ported kernel drivers, `userspace/metal/LICENSE.hakios-metal`.
 - **Scion / HakiOS Metal driver** — `userspace/metal/scion/` (commit `a6f4bc38`), license in `userspace/metal/scion/LICENSE.scion-hakios`. TODO: upstream link.
 - **fiio-jm21-xnu AudioServerPlugIn** — https://github.com/soumarcelino/fiio-jm21-xnu, `userspace/audio-plugin/` (license in `userspace/audio-plugin/LICENSE`).
-- **ios-pipa** — https://github.com/nishant713/ios-pipa (commit `830ec1c`), settings reproduced in `scripts/prepare-ios-root.py`.
+- **ios-pipa** — https://github.com/nishant713/ios-pipa (commit `830ec1c`), settings reproduced in `scripts/prepare-ios-root.py`; WPA code from `lx_wpa.c`/`lx_wpa.h` copied into `xnu-overlay/bsd/dev/b2l_wpa.c` and `bsd/sys/b2l_wpa.h`.
 - **Mesa 3D** 25.0.7 and **libdrm** — interfaces reproduced in `userspace/mesa/`.
 - **BearSSL** — https://www.bearssl.org, staged by `scripts/stage-bearssl.py`.
 
