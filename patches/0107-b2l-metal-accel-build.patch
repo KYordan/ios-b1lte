@@ -1,0 +1,6 @@
+B1L-0044 (Metal M1): build the IOAcceleratorES service Metal.framework looks for.
+--- a/iokit/conf/files
++++ b/iokit/conf/files
+@@
+ iokit/Kernel/arm/B2LMaliService.cpp optional iokitcpp b2l
++iokit/Kernel/arm/B2LMetalAccel.cpp optional iokitcpp b2l

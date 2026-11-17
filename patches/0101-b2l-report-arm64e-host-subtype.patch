@@ -1,0 +1,29 @@
+diff --git a/osfmk/kern/host.c b/osfmk/kern/host.c
+index 891abed7..e632eb5e 100644
+--- a/osfmk/kern/host.c
++++ b/osfmk/kern/host.c
+@@ -224,6 +224,24 @@ host_info(host_t host, host_flavor_t flavor, host_info_t info, mach_msg_type_num
+ 		basic_info->memory_size = machine_info.memory_size;
+ 		basic_info->cpu_type = slot_type(master_id);
+ 		basic_info->cpu_subtype = slot_subtype(master_id);
++#if defined(ARM64_BOARD_CONFIG_B2L)
++		{
++			/* Userspace capability reporting only (MobileGestalt/installd
++			 * "arm64e"; MIInstallerErrorDomain 67 otherwise). arm64e images
++			 * already execute through the kernel compat path; exec grading
++			 * keeps using cpu_subtype(). Kill switch: b2l_report_arm64e=0. */
++			extern bool b2l_arm64e_compat_enabled(void);
++			static int report = -1;
++			if (report < 0) {
++				int v = 1;
++				PE_parse_boot_argn("b2l_report_arm64e", &v, sizeof(v));
++				report = v ? 1 : 0;
++			}
++			if (report && basic_info->cpu_subtype == CPU_SUBTYPE_ARM64_V8 && b2l_arm64e_compat_enabled()) {
++				basic_info->cpu_subtype = CPU_SUBTYPE_ARM64E;
++			}
++		}
++#endif
+ 		basic_info->max_cpus = machine_info.max_cpus;
+ #if CONFIG_SCHED_SMT
+ 		if (sched_allow_NO_SMT_threads && current_task()->t_flags & TF_NO_SMT) {

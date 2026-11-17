@@ -1,0 +1,29 @@
+diff --git a/bsd/vfs/vfs_syscalls.c b/bsd/vfs/vfs_syscalls.c
+index 942dc249..0a755f17 100644
+--- a/bsd/vfs/vfs_syscalls.c
++++ b/bsd/vfs/vfs_syscalls.c
+@@ -10365,6 +10365,24 @@ renameatx_np(__unused proc_t p, struct renameatx_np_args *uap, __unused int32_t
+ 	           uap->tofd, uap->to, UIO_USERSPACE, uap->flags);
+ }
+ 
++#if defined(ARM64_BOARD_CONFIG_B2L)
++/* In-kernel rename by absolute path, never replacing the target (B1L-0024,
++ * b2l_apps_layout.h). Falls back to a plain rename when the file system has
++ * no RENAME_EXCL; the caller has checked that the target does not exist. */
++int b2l_kernel_rename_excl(const char *from, const char *to, vfs_context_t ctx);
++int
++b2l_kernel_rename_excl(const char *from, const char *to, vfs_context_t ctx)
++{
++	int error = renameat_internal(ctx, AT_FDCWD, CAST_USER_ADDR_T(from),
++	    AT_FDCWD, CAST_USER_ADDR_T(to), UIO_SYSSPACE, RENAME_EXCL);
++	if (error == ENOTSUP) {
++		error = renameat_internal(ctx, AT_FDCWD, CAST_USER_ADDR_T(from),
++		    AT_FDCWD, CAST_USER_ADDR_T(to), UIO_SYSSPACE, 0);
++	}
++	return error;
++}
++#endif
++
+ int
+ renameat(__unused proc_t p, struct renameat_args *uap, __unused int32_t *retval)
+ {

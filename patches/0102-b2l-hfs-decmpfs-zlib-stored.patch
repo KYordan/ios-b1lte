@@ -1,0 +1,26 @@
+diff --git a/bsd/kern/decmpfs.c b/bsd/kern/decmpfs.c
+index 4c4b2040..c6d5eb84 100644
+--- a/bsd/kern/decmpfs.c
++++ b/bsd/kern/decmpfs.c
+@@ -2350,6 +2350,11 @@ SECURITY_READ_ONLY_EARLY(static decmpfs_registration) Type1Reg =
+ 	.get_flags         = NULL/* no flags */
+ };
+ 
++#if defined(ARM64_BOARD_CONFIG_B2L)
++/* HFS+ compression types 3/4/9 (AppleFSCompression is not on this device). */
++#include "b2l_decmpfs.h"
++#endif
++
+ #pragma mark --- decmpfs initialization ---
+ 
+ void
+@@ -2363,6 +2368,9 @@ decmpfs_init(void)
+ 	decmpfs_ctx = vfs_context_create(vfs_context_kernel());
+ 
+ 	register_decmpfs_decompressor(CMP_Type1, &Type1Reg);
++#if defined(ARM64_BOARD_CONFIG_B2L)
++	b2l_decmpfs_register();
++#endif
+ 
+ 	ktriage_register_subsystem_strings(KDBG_TRIAGE_SUBSYS_DECMPFS, &ktriage_decmpfs_subsystem_strings);
+ 

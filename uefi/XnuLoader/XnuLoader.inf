@@ -1,0 +1,70 @@
+## @file
+# Eight-CPU plain ARM64 XNU loader with a boot menu, for the beyond UEFI.
+# SPDX-License-Identifier: BSD-2-Clause
+##
+[Defines]
+  INF_VERSION    = 0x0001001B
+  BASE_NAME      = XnuLoader
+  FILE_GUID      = 92742D9E-1A4F-42F8-9DC9-53895297B2F4
+  MODULE_TYPE    = UEFI_APPLICATION
+  VERSION_STRING = 0.1
+  ENTRY_POINT    = UefiMain
+
+[Sources]
+  XnuLoader.c
+  XnuHandoff.S
+  SecondaryEntry.S
+  MachO.c
+  DeviceTree.c
+  TouchHandoff.c
+  TouchDiagnostic.h
+  BoardDisplay.h
+  Progress.c
+  Arena.c
+  BootMenu.c
+  BootMenu.h
+  BootMenuEfi.c
+  BootMenuEfi.h
+  BootMenuDraw.c
+  BootMenuDraw.h
+  FontSpleen16x32.h
+  FontSpleen32x64.h
+  BootPayload.c
+  BootDevicePath.h
+  BootMetadata.h
+  CacheEfi.c
+  CacheHfs.c
+  CacheSha.c
+  b2l_cache_core.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  ArmPkg/ArmPkg.dec
+
+[LibraryClasses]
+  ArmLib
+  BaseLib
+  BaseMemoryLib
+  MemoryAllocationLib
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  UefiRuntimeServicesTableLib
+  IoLib
+  UefiLib
+  DevicePathLib
+
+[Protocols]
+  gEfiLoadedImageProtocolGuid
+  gEfiSimpleFileSystemProtocolGuid
+  gEfiGraphicsOutputProtocolGuid
+  gEfiRngProtocolGuid
+  gEfiBlockIoProtocolGuid
+  gEfiDiskIoProtocolGuid
+  gEfiPartitionInfoProtocolGuid
+  gEfiDevicePathProtocolGuid
+
+[Guids]
+  gEfiFileInfoGuid
+
+[BuildOptions]
+  *_*_*_CC_FLAGS = -DB2L_UEFI_BUILD -DB2L_MENU_TIMEOUT_S=5
