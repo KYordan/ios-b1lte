@@ -16,5 +16,5 @@ GPIO and B2LTouchDxe sources. Bixby currently produces a Home consumer event.
 
 The iOS26 wire adapter serializes current-format160-byte digitizer data with
 a separate28-byte queue header for every child event, plus native depth and
-subtree counts. See docs/build-0089.md and tests/test-hid-collection.py. This
+subtree counts. See docs/journal/build-0089.md and tests/test-hid-collection.py. This
 format differs from the original IOHIDFamily flat legacy collection.

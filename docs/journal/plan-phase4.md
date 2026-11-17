@@ -11,7 +11,7 @@
 | Horloge | Rouge |
 | Fluidité | Faible : rendu CPU en 1440×3040, @3x |
 
-Règle du projet : **une seule modification par build**, avec un journal `docs/build-b1l-XXXX.md`.
+Règle du projet : **une seule modification par build**, avec un journal `docs/journal/build-b1l-XXXX.md`.
 Les correctifs côté **kernel ou loader** passent par BOOT (~26 Mo, quelques secondes).
 Les correctifs côté **iOS** touchent la racine (USERDATA). `[HYPOTHÈSE]` = à prouver par les journaux.
 

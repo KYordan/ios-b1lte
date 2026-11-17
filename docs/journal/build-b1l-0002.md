@@ -94,7 +94,7 @@ Journal récupéré en lecture seule : `out/logs/0002-boot1.txt` (4,5 Mo, 36 269
 Causes et suites :
 - **Tactile** : le firmware a été construit sans `B2L_ENABLE_TOUCH=1`. Sans lui, `B2LTouchDxe` n'allume pas
   les alimentations `tsp_io` / `tsp_avdd`, et le kernel ne fait jamais l'initialisation électrique
-  (« never infer touch PMIC state »). Voir `beyond2lte-ios/docs/build-0054.md`.
+  (« never infer touch PMIC state »). Voir `beyond2lte-ios/docs/journal/build-0054.md`.
   → B1L-0003 : firmware reconstruit avec `B2L_ENABLE_TOUCH=1`, seule modification.
 - **SpringBoard bloqué** : cause non établie. Il faut les journaux unifiés iOS de la racine
   (`pull-b2l-unified-logs.py`, avec `B2L_BOARD=beyond1lte B2L_SERIAL=<SERIAL>`).

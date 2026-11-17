@@ -1,6 +1,6 @@
 # Unavailable AMFI entitlement interface
 
-This documents the 0014 absent-provider guards. [Build 0028](build-0028.md)
+This documents the 0014 absent-provider guards. [Build 0028](journal/build-0028.md)
 adds a separate opt-in unsigned development metadata provider; these guards
 remain effective when that provider is disabled, missing or incomplete.
 

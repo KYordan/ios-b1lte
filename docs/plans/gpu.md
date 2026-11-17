@@ -3,7 +3,7 @@
 Status 2026-11-04: **G0 decided (GLES renderer present, see docs/gpu-g0.md); G1 passed in B1L-0015** (G3D domain already on, GPU_ID 0x72110000 Mali-G76, 12 shader cores, 8 AS, 3 job slots). All rendering is CPU
 (QuartzCore software → IOSurface → `B2LFramebuffer` copy to scanout). `[VERIFY]` = to prove on the device or in the image.
 
-Rule: each stage is a separate build (`docs/build-b1l-XXXX.md`), is useful on its own, and has a pass/fail gate.
+Rule: each stage is a separate build (`docs/journal/build-b1l-XXXX.md`), is useful on its own, and has a pass/fail gate.
 Stages G1–G4 are porting work with known references. G6–G7 are research with no guarantee.
 
 ## Known facts

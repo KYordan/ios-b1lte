@@ -52,7 +52,7 @@ Physical continuation past the photographed AMFI fault is pending device evidenc
 The next device photograph stops before the entitlement path: HFS refuses the
 dirty non-journaled root left by the earlier 0013 panic. This does not establish
 whether the AMFI fix has passed on the phone. The filesystem was subsequently
-[repaired and journaling enabled](system-journal.md), then the unchanged 0014
+[repaired and journaling enabled](../system-journal.md), then the unchanged 0014
 BOOT was retried. Physical continuation remains a separate device test.
 
 After the journal correction, the device photograph confirms a successful native

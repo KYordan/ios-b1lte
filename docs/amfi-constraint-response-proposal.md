@@ -2,7 +2,7 @@
 
 Status: explicitly approved for implementation in build 0060 after review of
 this exact scope. Builds 0058 and 0059 did not include the AMFI MAC policy.
-See [build-0060.md](build-0060.md) for the implemented response and verification.
+See [build-0060.md](journal/build-0060.md) for the implemented response and verification.
 
 ## Exact proposed scope
 

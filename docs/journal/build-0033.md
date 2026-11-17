@@ -5,7 +5,7 @@ reset. Patch 0023 reverses the upstream SMP-specific changes from 0022; the
 single-CPU IOCPU provider and Apple device-tree topology are restored. The
 4024 MiB conventional-memory arena and 16-page bootstrap table budget remain.
 
-See [the automatic cache design](native-cache.md) for the learned-instruction,
+See [the automatic cache design](../native-cache.md) for the learned-instruction,
 read-only EFI staging, HFS replay/VFS application and power-loss behavior.
 The kernel retains the existing runtime emulator for unsupported conversions.
 The populated USERDATA image is not reformatted or transferred again.

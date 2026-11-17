@@ -12,7 +12,7 @@ n'existent que dans la branche tactile de l'UEFI de l'auteur, pas sur `master`. 
 pour allumer la puce, le kernel n'obtient jamais de réponse (`cmd=0x22`, 4 timeouts), car il
 n'initialise jamais lui-même l'alimentation du tactile.
 
-Le commit cité par l'auteur (`48add5bb…`, `docs/build-0053/0054.md`) n'est plus dans le dépôt public.
+Le commit cité par l'auteur (`48add5bb…`, `docs/journal/build-0053/0054.md`) n'est plus dans le dépôt public.
 Commit retenu : **`42412d0`** (« drain large sec_ts event backlogs ») de `codex/touch-from-8549bfa`.
 - `B2LTouchDiagnostic.h` y est identique à l'ABI du loader (aucune différence hors commentaires depuis `72a0db8`).
 - Par rapport à `master`, la carte mémoire et le reste de l'overlay ne changent pas ; seuls le tactile,

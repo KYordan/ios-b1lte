@@ -90,6 +90,6 @@ outputs, not Apple binaries, actual device keys or captured identifiers.
 
 ## 0090 integration update
 
-[0090](build-0090.md) retains this corrected QARMA fallback, adds the explicit
+[0090](journal/build-0090.md) retains this corrected QARMA fallback, adds the explicit
 boot-selected SipHash experiment, and publishes the immutable boot key with
 acquire/release ordering instead of taking the mutex on every invocation.

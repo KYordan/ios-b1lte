@@ -72,6 +72,6 @@ Mesure de référence : la ligne `M5 bench` (200 dessins dans une passe, image v
 
 ## Règles inchangées
 
-- Un changement par build, avec ses notes `docs/build-b1l-NNNN.md`.
+- Un changement par build, avec ses notes `docs/journal/build-b1l-NNNN.md`.
 - `metal-progress.md` mis à jour après chaque build et chaque test.
 - Flash sans demander, pour le travail Metal, avec toutes les gardes (TWRP root, modèle, taille, hash, relecture).

@@ -41,7 +41,7 @@ and recovered early log must establish the actual advertised RAM size.
 
 ## 0087 discontiguous ownership profile
 
-The earlier section records the 0031 single-arena profile. [0087](build-0087.md)
+The earlier section records the 0031 single-arena profile. [0087](journal/build-0087.md)
 adds separately allocated low-bank and first-upper-bank conventional spans.
 The primary bootstrap arena remains 4024MiB; it is no longer the total RAM
 ceiling. All fixed runtime-DT reservations and live secure-world holes remain

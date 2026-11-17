@@ -30,7 +30,7 @@
 
 ## 3. Phases
 
-Règle sur tout le projet : **une seule modification par boot de test, chaque build a son journal `docs/build-XXXX.md`.** « Verified » signifie observé sur ton S10.
+Règle sur tout le projet : **une seule modification par boot de test, chaque build a son journal `docs/journal/build-XXXX.md`.** « Verified » signifie observé sur ton S10.
 
 ### Phase 0 : Sécurité et faits (bloquante)
 - Lire en **Download mode** : `OEM LOCK`, `KG STATE`, `RMM STATE`. Les propriétés Android sont peut-être falsifiées par la ROM.

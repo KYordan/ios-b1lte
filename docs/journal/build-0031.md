@@ -35,7 +35,7 @@ It writes through a separate private reader whose only authorized extent is the
 USERDATA root. The SYSTEM BSD view excludes the log tail and remains read-only.
 The whole-LU alias never gains write access.
 
-See [persistent console](persistent-console.md) for framing, concurrency and
+See [persistent console](../persistent-console.md) for framing, concurrency and
 recovery extraction. The worker emits a bounded progress line about every 30
 seconds: emulation trap/completion counts, last best-effort PID/PC and log-write
 errors. These relaxed samples are telemetry, not a coherent thread stack or a
@@ -50,7 +50,7 @@ XNU firmware profile keeps all 25 live fixed reservations, the lower guards and
 first upper-bank guard. It exposes only the safe higher span and reserves 32 MiB
 EFI headroom, yielding at most **4024 MiB** XNU RAM. Actual EFI fragmentation may
 reduce this. The loader verifies allocated/final map ownership, and the bootstrap
-table budget grows from 10 to 16 pages. See [RAM profile](ram-profile.md).
+table budget grows from 10 to 16 pages. See [RAM profile](../ram-profile.md).
 
 This package retains one CPU. A separately staged two-core candidate needs a
 clean MAX_CPUS=2 build and real secondary-entry, per-core timer and bidirectional

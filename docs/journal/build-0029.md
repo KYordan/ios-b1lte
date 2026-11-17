@@ -25,7 +25,7 @@ passed. The complete 23,094,320-byte BOOT prefix was read back with the expected
 SHA-256 after installation, and reboot was requested. Runtime continuation
 beyond the prior boot task requires the next device screen.
 
-See [signing API inventory](signing-api-inventory.md) for remaining metadata
+See [signing API inventory](../signing-api-inventory.md) for remaining metadata
 and authentication surfaces. Their presence in the source does not mean they
 are all required by the current boot path.
 

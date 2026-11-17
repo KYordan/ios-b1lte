@@ -1,7 +1,7 @@
 # Build 0060: consistent unavailable AMFI launch-constraint response
 
 The user explicitly approved the exact persistent development-policy scope
-recorded in [amfi-constraint-response-proposal.md](amfi-constraint-response-proposal.md).
+recorded in [amfi-constraint-response-proposal.md](../amfi-constraint-response-proposal.md).
 The existing unsigned-development gate and metadata credential policy remain.
 After that metadata policy registers, a separate permanent MAC policy named
 AMFI registers only if no policy of that name already exists.

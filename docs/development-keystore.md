@@ -36,7 +36,7 @@ Build0071 adds read-only device-state DER queries17/35 for the same opened,
 volatile bag0: one handle scalar, no structure input or scalar output, and a
 12-byte DER dictionary containing only `sls=3` (native Disabled/no-passcode).
 The native decoder defaults omitted optional fields to zero. Scalar7 retains
-its separate unlocked-since-boot bit4. See [0071 details](build-0071.md) for
+its separate unlocked-since-boot bit4. See [0071 details](journal/build-0071.md) for
 why the former unsupported response caused SpringBoard to display passcode UI.
 The implemented selectors are0,7,14,17,35. Notification registration and all
 cryptographic/persistent bag operations remain unsupported. Numeric

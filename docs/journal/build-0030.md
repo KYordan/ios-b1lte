@@ -1,7 +1,7 @@
 # Build 0030: volatile development system keybag
 
 Adds the gated AppleKeyStore IOResources provider described in
-[development KeyStore](development-keystore.md). The current root remains the
+[development KeyStore](../development-keystore.md). The current root remains the
 existing journaled HFS USERDATA volume. No root image or filesystem placeholder
 bag is rewritten. The known EFI/FD and boot arguments are reused.
 

@@ -62,7 +62,7 @@ or partition-table write was performed. The local installation receipt is
 `out/0001/flash-receipt.json`.
 
 Observe the entry marker, XNU console, CPU registration
-and `B2L IRQ proof` lines described in [runtime milestones](runtime-bringup.md).
+and `B2L IRQ proof` lines described in [runtime milestones](../runtime-bringup.md).
 A later root-device wait is expected without a kernel storage driver and root
 filesystem. Screen or runtime evidence must be captured before claiming a
 successful physical kernel boot.

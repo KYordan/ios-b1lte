@@ -4,7 +4,7 @@
 
 ---
 
-### 11. Journaux de build (`docs/build-b1l-XXXX.md`)
+### 11. Journaux de build (`docs/journal/build-b1l-XXXX.md`)
 
 114 journaux existent (0001 à 0139, avec des trous). Chaque journal contient : Date, Base, Objectif, Changements, Installé (hash BOOT relu), Résultat, Rollback.
 

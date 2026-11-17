@@ -46,7 +46,7 @@ handling for this BSD path. Its explicit development root policy accepts the
 unencrypted, unsealed HFS root without claiming Apple authentication. The real
 MD5 implementation required by HFS volume UUIDs is included. The 0013 device photograph verifies the read/write HFS root mount and native
 write/cache flush. Empty HFS supplies no init or userspace.
-See [HFS integration](hfs-provider.md) and [build 0013](build-0013.md).
+See [HFS integration](hfs-provider.md) and [build 0013](journal/build-0013.md).
 
 ## Disk boundary
 

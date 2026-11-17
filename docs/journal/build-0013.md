@@ -34,8 +34,8 @@ operation; unsupported controls do not return fake success.
 
 The firmware profile contains the newly built loader with the explicit root
 arguments. The provider and root-policy details are documented in
-[HFS provider](hfs-provider.md). The empty SYSTEM image preparation is documented
-[separately](system-hfs.md).
+[HFS provider](../hfs-provider.md). The empty SYSTEM image preparation is documented
+[separately](../system-hfs.md).
 
 ## Host build and checks
 

@@ -51,7 +51,7 @@ prove EL0 execution.
 
 The existing unavailable-AMFI path and 16 KiB CodeDirectory handling remain
 known follow-on gates. This build is a PoC, not complete iOS compatibility.
-See [runtime design](arm64e-runtime.md) and [PACGA implementation](pacga-qarma5.md).
+See [runtime design](../arm64e-runtime.md) and [PACGA implementation](../pacga-qarma5.md).
 
 ## 0016b correction
 

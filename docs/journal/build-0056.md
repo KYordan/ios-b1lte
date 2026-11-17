@@ -22,7 +22,7 @@ records are appended and committed to the root-only USERDATA undo archive.
 Only then are both SYSTEM copies erased and their cells reused. A/B scan-range
 headers are trimmed where possible. Archive headers, record hashes and readback
 protect publication; record length alone is not used as a validity check.
-See [native-cache.md](native-cache.md) for the exact ordering, maintenance boot
+See [native-cache.md](../native-cache.md) for the exact ordering, maintenance boot
 requirements, failure behavior and new counters.
 
 The archive consumes USERDATA space. Older maintenance images cannot restore

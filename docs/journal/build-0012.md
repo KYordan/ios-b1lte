@@ -67,4 +67,4 @@ bounded SYSTEM probe recognizing Android LP geometry. Native UFS takeover and
 reads after ExitBootServices are therefore physically verified. Existing
 Apple_HFS root waiting remains expected: HFS/root integration is outside this
 kernel update. The later authorized SYSTEM HFS+ preparation is recorded
-separately in [SYSTEM HFS+ preparation](system-hfs.md).
+separately in [SYSTEM HFS+ preparation](../system-hfs.md).

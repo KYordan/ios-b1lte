@@ -3,7 +3,7 @@
 This is an opt-in runtime compatibility service for the plain ARM64 B2L kernel.
 It leaves `HAS_APPLE_PAC` disabled and retains the real ARM64_V8 host subtype.
 It does not modify executable files or claim authenticated-pointer security.
-[Build 0028](build-0028.md) separately supplies explicitly unauthenticated
+[Build 0028](journal/build-0028.md) separately supplies explicitly unauthenticated
 AMFI development metadata, without a verified signature or fake crypto provider.
 
 ## Activation and execution

@@ -173,6 +173,6 @@ Ce sont des scripts d'exécution passés (builds 0069 à 0081 et au-delà), chac
 
 ### 6. Règle d'or du projet
 
-> **Une seule modification par build de test. Chaque build a son journal `docs/build-b1l-XXXX.md`. « Verified » signifie observé sur le S10.** Ne jamais revendiquer un résultat qui n'a pas été observé sur l'appareil.
+> **Une seule modification par build de test. Chaque build a son journal `docs/journal/build-b1l-XXXX.md`. « Verified » signifie observé sur le S10.** Ne jamais revendiquer un résultat qui n'a pas été observé sur l'appareil.
 
 La partie 2 couvre l'environnement de build, le processus de build pas à pas, et la politique de sécurité/stockage.

@@ -72,4 +72,4 @@ l'outil, qui n'a pas les valeurs de spécialisation que l'app fournit au moment 
 6. Imageblocks de QuartzCore (16 noyaux) : seulement si un journal montre qu'on les demande.
 7. Archive de pipelines précompilés (`archive.metallib`) : la refuser proprement, sans plantage.
 
-Sources : `docs/build-b1l-0185.md` à `0191.md`, `docs/metal-progress.md`, journaux `out/logs/0186-boot.txt` à `0189-boot.txt`.
+Sources : `docs/journal/build-b1l-0185.md` à `0191.md`, `docs/metal-progress.md`, journaux `out/logs/0186-boot.txt` à `0189-boot.txt`.

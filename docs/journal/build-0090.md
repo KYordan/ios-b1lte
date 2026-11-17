@@ -19,7 +19,7 @@ same algorithm and key until reboot. A small BSD-side bridge keeps the SipHash c
 The bridge and BSD SipHash objects are explicitly compiled with `-mgeneral-regs-only` for the exception path.
 
 The corrected QARMA assembly is included: Darwin now emits the missing ADD
-when locating its constants. See [the investigation](pacga-alternatives.md).
+when locating its constants. See [the investigation](../pacga-alternatives.md).
 Periodic `B2L LIVE` summaries append `pacga=siphash24` or `pacga=qarma5`, allowing
 post-boot confirmation without recording keys or operands. PACGA remains excluded from persistent instruction conversion. This change
 does not alter the native-cache disk format or erase learned records. The 0089 HID

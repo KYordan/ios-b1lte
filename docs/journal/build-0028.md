@@ -3,7 +3,7 @@
 ## Scope
 
 This build keeps the existing ARM64e/PAN/pager implementation and adds the two
-policy layers identified by the [shim comparison](shim-audit.md). It does not
+policy layers identified by the [shim comparison](../shim-audit.md). It does not
 change RAM reservations, firmware, root filesystem contents or device drivers.
 
 - Patch 0016 registers the `Sandbox` MAC policy before userspace starts. Its
@@ -21,7 +21,7 @@ change RAM reservations, firmware, root filesystem contents or device drivers.
   consult credential metadata. Native CLEARPLATFORM remains effective. Non-root
   filesystem exec clears inherited metadata and platform classification.
 
-See [Sandbox policy](sandbox-policy.md) and [AMFI metadata](development-amfi.md)
+See [Sandbox policy](../sandbox-policy.md) and [AMFI metadata](../development-amfi.md)
 for contracts and reproducible tests.
 
 Both layers require ARM64e compatibility enabled and global signing enforcement

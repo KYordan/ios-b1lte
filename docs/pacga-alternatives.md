@@ -83,7 +83,7 @@ It fixes correctness, not the measured trap rate.
 
 ## Implementation follow-up
 
-[0090](build-0090.md) implements the explicit boot-selected SipHash trial,
+[0090](journal/build-0090.md) implements the explicit boot-selected SipHash trial,
 immutable-key acquire/release publication and QARMA fallback. The earlier
 measurements above remain host-only evidence; device results are tracked in
 the build note. No result cache is added in this experiment.
