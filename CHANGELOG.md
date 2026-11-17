@@ -10,7 +10,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Build-by-build history:
 - `docs/architecture.md`, `docs/installation.md`, `docs/troubleshooting.md`, `THIRD_PARTY_NOTICES.md`, `.env.example`.
 
 ### Changed
-- Build reports moved to `docs/journal/`.
+- Build reports moved to `docs/journal/` (kept in French); status and plan documents translated to English under `docs/gpu`, `docs/audio`, `docs/bluetooth`, `docs/plans` and `docs/project`.
 - Scripts read `S10_PORT`, `B2L_ROOT`, `ADB`, `B2L_SERIAL` and `PY_ENV` instead of fixed paths.
 
 ### Removed
