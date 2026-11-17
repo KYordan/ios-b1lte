@@ -17,3 +17,26 @@ out/
 __pycache__/
 *.pyc
 /userspace/wallpaper/*.jpg
+
+# Logs, backups and editor leftovers from the build/flash loop
+*.log
+*.bak
+*.*bak
+*.before-*
+*.orig
+*.v1
+*.tmp
+progress/
+
+# Device-specific data that must never be published
+wifi.conf
+*-calib.bin
+*.blob
+*.nvram
+device-s10/
+vendor-audio/
+.env
+
+# Apple binaries extracted from the IPSW
+dyld_shared_cache*
+*.dylib
