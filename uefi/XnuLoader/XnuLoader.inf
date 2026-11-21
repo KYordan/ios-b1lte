@@ -52,6 +52,8 @@
   IoLib
   UefiLib
   DevicePathLib
+  DxeServicesTableLib
+  PrintLib
 
 [Protocols]
   gEfiLoadedImageProtocolGuid

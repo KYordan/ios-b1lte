@@ -334,7 +334,8 @@ static int b2l_acpm_xfer(struct b2l_acpm *a, uint32_t cmd[4])
         IODelay(10);
     }
     if (++a->seq >= 64) a->seq = 1;
-    cmd[0] = (cmd[0] & 0xffffu) | (a->seq << 16);
+    /* Only the sequence field (bits 16-21) is ours: bit 22 is ACPM_IPC_PROTOCOL_STOP (b2l_acpm_stop). */
+    cmd[0] = (cmd[0] & ~(0x3fu << 16)) | (a->seq << 16);
     uint32_t slot = a->tx_base + a->elem * front;
     for (uint32_t i = 0; i < a->elem / 4; i++) b2l_acpm_wr(a, slot + 4 * i, i < 4 ? cmd[i] : 0);
     __asm__ volatile("dsb sy" ::: "memory");
@@ -394,6 +395,24 @@ extern "C" int64_t b2l_pmic_rtc_seconds(void)
     IOLog("B2L RTC: 20%02u-%02u-%02u %02u:%02u:%02u UTC -> %lld\n", d[6] & 0x7f, d[5] & 0x0f, d[4] & 0x1f,
         d[2] & 0x1f, d[1] & 0x7f, d[0] & 0x7f, t);
     return t;
+}
+
+/* Samsung exynos_acpm_reboot() -> acpm_enter_wfi(): before every restart or PS_HOLD power off the AP asks the APM
+ * firmware to stop, on the channel of the DT "acpm" node (acpm-ipc-channel 4 on the S10e and S10), with
+ * cmd[0] = 1 << ACPM_IPC_PROTOCOL_STOP (22) and a reply expected. Without it PS_HOLD low restarted the S10e instead
+ * of switching it off. 0 when the APM answered. */
+extern "C" int b2l_acpm_stop(void)
+{
+    struct b2l_acpm a = {};
+    a.sram = (volatile uint8_t *)ml_io_map(B2L_ACPM_SRAM_PA, B2L_ACPM_SRAM_SIZE);
+    a.mbox = (volatile uint8_t *)ml_io_map(B2L_ACPM_MBOX_PA, B2L_ACPM_MBOX_SIZE);
+    if (!a.sram || !a.mbox) return -10;
+    int e = b2l_acpm_parse_ch(&a, 4);
+    if (e) return -20 + e;
+    a.reply = 1;
+    if (b2l_acpm_rd(&a, a.rx_front) < a.len) b2l_acpm_wr(&a, a.rx_rear, b2l_acpm_rd(&a, a.rx_front));
+    uint32_t c[4] = { 1u << 22, 0, 0, 0 };
+    return b2l_acpm_xfer(&a, c);
 }
 
 static void b2l_measure_all(const char *when, processor_t const procs[MAX_CPUS])

@@ -9,11 +9,14 @@
  */
 #include <Uefi.h>
 #include <Library/BaseLib.h>
+#include <Library/ArmLib.h>
 #include <Library/IoLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/UefiLib.h>
+#include <Library/DxeServicesTableLib.h>
+#include <Library/PrintLib.h>
 #include <Protocol/GraphicsOutput.h>
 #include "BootMenu.h"
 #include "BootMenuEfi.h"
@@ -148,12 +151,78 @@ Reset(BOOLEAN Recovery)
     Print(L"\r\nReboot failed. Hold Power to switch the phone off.\r\n");
 }
 
-STATIC VOID
+/* Samsung's sec_power_off() first stops the APM firmware (exynos_acpm_reboot -> acpm_enter_wfi): one message with
+ * cmd[0] = 1 << ACPM_IPC_PROTOCOL_STOP (22) on the DT "acpm" node's channel (4), reply awaited. Without it PS_HOLD
+ * low restarted the S10e. Same queue layout as the kernel's B2LACPM.h (framework header at SRAM + 0x7000, 72-byte
+ * channel descriptors). Touched only if the firmware maps both regions: an unmapped access would hang the menu. */
+#define B2L_ACPM_SRAM         0x02039000ULL
+#define B2L_ACPM_SRAM_SIZE    0x30000u
+#define B2L_ACPM_MBOX         0x15900000ULL
+#define B2L_ACPM_STOP_CH      4u
+
+STATIC BOOLEAN
+Mapped(UINT64 Base, UINT64 Size)
+{
+    EFI_GCD_MEMORY_SPACE_DESCRIPTOR D;
+    if (gDS == NULL || EFI_ERROR(gDS->GetMemorySpaceDescriptor(Base, &D))) return FALSE;
+    return D.GcdMemoryType != EfiGcdMemoryTypeNonExistent && D.BaseAddress + D.Length >= Base + Size;
+}
+
+STATIC UINT32 Sram(UINT32 Off) { return MmioRead32(B2L_ACPM_SRAM + Off); }
+STATIC BOOLEAN InSram(UINT32 Off, UINT32 Bytes) { return Off < B2L_ACPM_SRAM_SIZE && Bytes <= B2L_ACPM_SRAM_SIZE - Off && !(Off & 3); }
+
+STATIC INTN
+AcpmStop(VOID)
+{
+    if (!Mapped(B2L_ACPM_SRAM, B2L_ACPM_SRAM_SIZE) || !Mapped(B2L_ACPM_MBOX, 0x1000)) return -1;
+    UINT32 Chans = Sram(0x7000 + 8), ApMax = Sram(0x7000 + 24);
+    if (ApMax <= B2L_ACPM_STOP_CH || ApMax > 32 || !InSram(Chans, 72u * ApMax)) return -2;
+    UINT32 C = Chans + 72u * B2L_ACPM_STOP_CH, Ci = C + 16;
+    UINT32 Id = Sram(C), TxRear = Sram(Ci), TxFront = Sram(Ci + 4), TxBase = Sram(Ci + 8);
+    UINT32 RxRear = Sram(Ci + 24), RxFront = Sram(Ci + 28), RxBase = Sram(Ci + 32), Len = Sram(Ci + 36), Elem = Sram(Ci + 40);
+    if (Id >= 16 || Elem < 16 || Elem > 64 || (Elem & 3) || Len < 1 || Len > 64 ||
+        !InSram(TxRear, 4) || !InSram(TxFront, 4) || !InSram(TxBase, Elem * Len) ||
+        !InSram(RxRear, 4) || !InSram(RxFront, 4) || !InSram(RxBase, Elem * Len))
+        return -3;
+    if (Sram(RxFront) < Len) MmioWrite32(B2L_ACPM_SRAM + RxRear, Sram(RxFront));   /* drop stale replies */
+    UINT32 Front = Sram(TxFront), Next;
+    if (Front >= Len) return -4;
+    Next = Front + 1 >= Len ? 0 : Front + 1;
+    for (UINTN Wait = 0; Next == Sram(TxRear); Wait++) {
+        if (Wait > 1500) return -5;   /* 15 ms, as Linux */
+        gBS->Stall(10);
+    }
+    CONST UINT32 Seq = 1, Cmd0 = (1u << 22) | (Seq << 16);
+    for (UINT32 I = 0; I < Elem / 4; I++) MmioWrite32(B2L_ACPM_SRAM + TxBase + Elem * Front + 4 * I, I ? 0 : Cmd0);
+    ArmDataSynchronizationBarrier();
+    MmioWrite32(B2L_ACPM_SRAM + TxFront, Next);
+    ArmDataSynchronizationBarrier();
+    MmioWrite32(B2L_ACPM_MBOX + 0x08 /* INTGR0 */, (1u << Id) << 16);
+    for (UINTN Wait = 0; Wait < 5000; Wait++) {   /* 50 ms */
+        UINT32 F = Sram(RxFront), R = Sram(RxRear);
+        if (F >= Len || R >= Len) return -6;
+        for (UINT32 I = R; I != F; I = (I + 1) % Len) {
+            if (((Sram(RxBase + Elem * I) >> 16) & 0x3f) != Seq) continue;
+            R = (R + 1) % Len;
+            MmioWrite32(B2L_ACPM_SRAM + RxRear, R);
+            if (R == Sram(RxFront)) MmioWrite32(B2L_ACPM_MBOX + 0x20 /* INTCR1 */, 1u << Id);
+            return 0;
+        }
+        gBS->Stall(10);
+    }
+    return -7;
+}
+
+/* Returns only when the phone is still on: the result of the ACPM stop, for the menu's note. */
+STATIC INTN
 PowerOff(VOID)
 {
-    MmioAnd32(B2L_PMU_BASE + B2L_PMU_PS_HOLD, ~B2L_PS_HOLD_DATA);
-    gBS->Stall(1000 * 1000);
-    gRT->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL);   /* fallback: the firmware's own power off */
+    INTN Stop = AcpmStop();
+    for (UINTN Try = 0; Try < 3; Try++) {   /* sec_power_off() retries once a second */
+        MmioAnd32(B2L_PMU_BASE + B2L_PMU_PS_HOLD, ~B2L_PS_HOLD_DATA);
+        gBS->Stall(1000 * 1000);
+    }
+    return Stop;
 }
 
 /* Volume up held at start: menu with recovery preselected. Volume down held: menu without countdown. */
@@ -200,11 +269,15 @@ B2lBootMenu(CONST CHAR8 *Note, BOOLEAN NoCountdown)
             continue;
         }
         if (Action == B2L_ACT_POWEROFF) {
+            STATIC CHAR8 Still[96];
             Draw(&Menu, Now, Note, "Switching off...");
-            PowerOff();
-            /* Still here (on a charger the PMIC keeps or restarts the supply): back to the menu, no countdown. */
+            INTN Stop = PowerOff();
+            /* Still here (on a charger the PMIC keeps the supply): back to the menu, no countdown, with the
+             * ACPM result so a photo says which step did not take. */
+            AsciiSPrint(Still, sizeof(Still), "Still on (charger connected?). Unplug it and try again. [acpm %d]",
+                        (INT32)Stop);
             b2l_menu_init(&Menu, Menu.selected, 0, B2L_START_FORCE_MENU, NowMs());
-            Draw(&Menu, NowMs(), "Still on (charger connected?). Unplug it and try again.", NULL);
+            Draw(&Menu, NowMs(), Still, NULL);
             continue;
         }
         Draw(&Menu, Now, Note, Action == B2L_ACT_RECOVERY ? "Rebooting to recovery..." : "Rebooting...");

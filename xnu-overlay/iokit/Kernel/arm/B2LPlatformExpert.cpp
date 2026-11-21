@@ -6,6 +6,7 @@
 #include <IOKit/IOPlatformExpert.h>
 #include <IOKit/IODeviceTreeSupport.h>
 #include <IOKit/IOLib.h>
+#include <libkern/libkern.h>   /* printf: reaches the console and the persistent log, even at halt */
 #include <IOKit/IOKitKeys.h>
 #include <libkern/c++/OSData.h>
 #include <pexpert/pexpert.h>
@@ -30,6 +31,7 @@ OSDefineMetaClassAndStructors(B2LPlatformExpert, IODTPlatformExpert);
  *   power off: PS_HOLD_CONTROL bit 8 (PS_HOLD data) low, the PMIC then cuts the supply.
  * Panic types are left to IOPlatformExpert so a panic stays on screen. */
 extern "C" vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
+extern "C" int b2l_acpm_stop(void);   /* B2LCPU.cpp */
 #define B2L_PMU_PHYS             0x15860000ULL
 #define B2L_PMU_SIZE             0x4000
 #define B2L_PMU_PS_HOLD_CONTROL  0x030C
@@ -59,16 +61,22 @@ B2LPlatformExpert::haltRestart(unsigned int type)
 	if (b2l_pmu == NULL || (type != kPEHaltCPU && type != kPERestartCPU)) {
 		return IODTPlatformExpert::haltRestart(type);
 	}
+	/* Samsung's exynos_reboot() and sec_power_off() stop the APM firmware first (exynos_acpm_reboot). */
+	int stop = b2l_acpm_stop();
+	printf("B2L PM: ACPM stop %d\n", stop);
 	if (type == kPERestartCPU) {
-		kprintf("B2L PM: restart (PMU SWRESET)\n");
+		printf("B2L PM: restart (PMU SWRESET)\n");
 		b2l_pmu_reset();
 	} else {
-		kprintf("B2L PM: power off (PMU PS_HOLD low)\n");
-		uint32_t hold = *(volatile uint32_t *)(b2l_pmu + B2L_PMU_PS_HOLD_CONTROL);
-		b2l_pmu_write(B2L_PMU_PS_HOLD_CONTROL, hold & ~B2L_PMU_PS_HOLD_DATA);
-		/* Still running (the PMIC keeps the phone up, e.g. on a charger): a restart beats the timeout panic. */
-		IODelay(1000 * 1000);
-		kprintf("B2L PM: still powered after PS_HOLD low, restarting\n");
+		/* As sec_power_off(): PS_HOLD low once a second; after 5 tries (or on a charger, where the PMIC keeps
+		 * the supply) restart rather than spin into the shutdown-timeout panic. */
+		for (int attempt = 1; attempt <= 5; attempt++) {
+			printf("B2L PM: power off (PMU PS_HOLD low), try %d\n", attempt);
+			uint32_t hold = *(volatile uint32_t *)(b2l_pmu + B2L_PMU_PS_HOLD_CONTROL);
+			b2l_pmu_write(B2L_PMU_PS_HOLD_CONTROL, hold & ~B2L_PMU_PS_HOLD_DATA);
+			IODelay(1000 * 1000);
+		}
+		printf("B2L PM: still powered after PS_HOLD low, restarting\n");
 		b2l_pmu_reset();
 	}
 	IODelay(1000 * 1000);
