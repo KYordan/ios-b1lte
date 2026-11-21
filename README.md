@@ -47,8 +47,8 @@ Tested on the phone unless marked otherwise. Build numbers are GitHub Actions ru
 | **Clock** | ✅ Works | Time from the PMIC RTC |
 | **Root filesystem** | ✅ Works | HFS+ root on UFS `userdata`, made on Linux |
 | **SpringBoard & apps** | 🚧 Partial | Lock screen, home screen, dock, Control Center, Settings, Photos, App Library; widgets stay at "Waiting…", app-switcher snapshots are black |
-| **Power off / restart** | 🚧 Partial | Restart works. **Power off from iOS works** since build 12 (PMIC WTSR/SMPL disarmed, APM stopped, then `PS_HOLD`). The boot menu's *Power off* still restarts: UEFI does not map the APM memory, build 13 maps it |
-| **Battery** | 🚧 In progress | iOS shows 0 %: the bootloader leaves the MAX77705 bus unconfigured. Build 12 set the USI mode and timings, but bytes never left the controller; build 13 also sets the SCL/SDA pins, untested |
+| **Power off / restart** | 🚧 Partial | Restart works. **Power off from iOS works** since build 12 (PMIC WTSR/SMPL disarmed, APM stopped, then `PS_HOLD`). The boot menu's *Power off* still restarts: the UEFI GCD describes the APM memory only in part (`wtsr -14, acpm -14`); build 14 maps the missing pieces, untested |
+| **Battery** | ✅ Works | Level shown in Settings and the status bar since build 13 (`B2LBattery`: MAX77705 fuel gauge; the driver sets up the bus the bootloader leaves unconfigured: USI mode, pins, timings). Charging state not checked yet |
 | **Display sleep** | ❌ Not working | The power button dims and freezes the picture; backboardd's display-power request (IOMobileFramebuffer selector 79) is not implemented |
 | **Storage size** | ❌ Not working | *Capacity* reads "Zero KB" (no IOMedia for the UFS disk); *Available* is right |
 | **GPU (Metal)** | ❌ Not on the S10e yet | The Mali-G76 comes up and runs test jobs; the S10e SYSTEM image does not carry the Metal userland yet. Plan: [docs/plans/s10e-metal.md](docs/plans/s10e-metal.md) (the S10 already draws its interface on the GPU: [metal-progress.md](docs/gpu/metal-progress.md)) |

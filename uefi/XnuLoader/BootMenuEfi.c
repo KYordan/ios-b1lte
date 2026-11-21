@@ -174,15 +174,20 @@ Reset(BOOLEAN Recovery)
 STATIC INTN
 Mapped(UINT64 Base, UINT64 Size)
 {
-    EFI_GCD_MEMORY_SPACE_DESCRIPTOR D;
-    if (gDS == NULL || EFI_ERROR(gDS->GetMemorySpaceDescriptor(Base, &D))) return -11;
-    if (D.GcdMemoryType == EfiGcdMemoryTypeNonExistent) {
-        UINT64 B = Base & ~0xFFFULL, L = ((Base + Size + 0xFFFULL) & ~0xFFFULL) - B;
-        if (EFI_ERROR(gDS->AddMemorySpace(EfiGcdMemoryTypeMemoryMappedIo, B, L, EFI_MEMORY_UC))) return -12;
-        if (EFI_ERROR(gDS->SetMemorySpaceAttributes(B, L, EFI_MEMORY_UC))) return -13;
-        if (EFI_ERROR(gDS->GetMemorySpaceDescriptor(Base, &D))) return -11;
+    /* Build 13: -14 for both ranges, i.e. the GCD describes them only in part (a descriptor ends before the range
+     * does). Walk the range descriptor by descriptor and add only the absent pieces. */
+    UINT64 At = Base & ~0xFFFULL, End = (Base + Size + 0xFFFULL) & ~0xFFFULL;
+    if (gDS == NULL) return -11;
+    while (At < End) {
+        EFI_GCD_MEMORY_SPACE_DESCRIPTOR D;
+        if (EFI_ERROR(gDS->GetMemorySpaceDescriptor(At, &D)) || D.BaseAddress + D.Length <= At) return -11;
+        UINT64 Piece = (D.BaseAddress + D.Length < End ? D.BaseAddress + D.Length : End) - At;
+        if (D.GcdMemoryType == EfiGcdMemoryTypeNonExistent) {
+            if (EFI_ERROR(gDS->AddMemorySpace(EfiGcdMemoryTypeMemoryMappedIo, At, Piece, EFI_MEMORY_UC))) return -12;
+            if (EFI_ERROR(gDS->SetMemorySpaceAttributes(At, Piece, EFI_MEMORY_UC))) return -13;
+        }
+        At += Piece;
     }
-    if (D.GcdMemoryType == EfiGcdMemoryTypeNonExistent || D.BaseAddress + D.Length < Base + Size) return -14;
     return 0;
 }
 
