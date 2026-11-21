@@ -5,7 +5,8 @@
  * Bus: hsi2c@15D60000 (DT /hsi2c@15D60000/max77705@66), the same HSI2C transfer sequence as B2LInput.cpp; the bus
  * is set up here when the bootloader left it unconfigured (setupBus). Nothing is written to the PMIC: reads only. Addresses and registers after
  * Samsung's max77705 drivers: fuel gauge 0x36 (RepCap 0x05, RepSOC 0x06, VCell 0x09, Current 0x0A, FullCapRep 0x10),
- * charger 0x69 (CHG_INT_OK 0xB2: CHGIN_OK 0x40, WCIN_OK 0x20; CHG_DETAILS_01 0xB4 low nibble: 0-3 charging, 4 done).
+ * charger 0x69 (CHG_INT_OK 0xB2: CHGIN_OK 0x40, WCIN_OK 0x20; CHG_DETAILS_00 0xB3 bits 6-5 CHGIN_DTLS, 3 = VBUS
+ * valid; CHG_DETAILS_01 0xB4 low nibble: 0-2 charging, 3-4 full, 5-7 not charging, 8/A/B discharging).
  * Units: RepSOC 1/256 %, VCell 78.125 uV, Current 1.5625 uV / Rsense with DT fuelgauge,fg_resistor 2 (5 mOhm), i.e.
  * 0.3125 mA, capacities 5 uVh / 5 mOhm = 1 mAh. DT fuelgauge,capacity_max 1000 / capacity_min 0: the UI value is RepSOC.
  */
@@ -41,7 +42,7 @@
 #define B2L_BAT_FG         0x36
 #define B2L_BAT_CHG        0x69
 #define B2L_BAT_DESIGN_MAH 3100        /* S10e (EB-BG970ABU) */
-#define B2L_BAT_PERIOD_MS  20000
+#define B2L_BAT_PERIOD_MS  10000
 
 class B2LBattery : public IOPMPowerSource {
 	OSDeclareDefaultStructors(B2LBattery);
@@ -51,7 +52,8 @@ class B2LBattery : public IOPMPowerSource {
 	volatile uint8_t   *fI2c;
 	IOWorkLoop         *fLoop;
 	IOTimerEventSource *fTimer;
-	unsigned            fFailures, fLogs, fLastPercent;
+	unsigned            fFailures, fLogs, fLastPercent, fUpdates;
+	uint32_t            fLastChg;
 	bool                fPublished;
 
 	static uint64_t uptimeUS() { uint64_t ns = 0; absolutetime_to_nanoseconds(mach_absolute_time(), &ns); return ns / 1000; }
@@ -134,17 +136,21 @@ class B2LBattery : public IOPMPowerSource {
 		}
 		bool haveCurrent = read16(0x0A, &current);
 		bool haveCap = read16(0x05, &repcap) && read16(0x10, &fullcap);
-		uint8_t intok = 0, dtls = 0;
-		bool haveChg = readRegs(B2L_BAT_CHG, 0xB2, &intok, 1) && readRegs(B2L_BAT_CHG, 0xB4, &dtls, 1);
+		/* As Samsung's max77705_charger.c: ONLINE = CHG_INT_OK WCIN_OK (0x20) or CHGIN_OK (0x40); DETAILS_00 bits 6-5
+		 * CHGIN_DTLS = 3 is a valid VBUS; DETAILS_01 low nibble CHG_DTLS: 0-2 charging, 3-4 full, 5-7 not charging,
+		 * 8/A/B discharging. */
+		uint8_t intok = 0, dtls0 = 0, dtls = 0;
+		bool haveChg = readRegs(B2L_BAT_CHG, 0xB2, &intok, 1) && readRegs(B2L_BAT_CHG, 0xB3, &dtls0, 1) &&
+		    readRegs(B2L_BAT_CHG, 0xB4, &dtls, 1);
 
 		unsigned percent = (soc + 128u) >> 8;
 		if (percent > 100) percent = 100;
 		unsigned mV = (unsigned)vcell * 625u / 8000u;
 		int mA = haveCurrent ? (int)(int16_t)current * 5 / 16 : 0;
-		bool external = haveChg ? (intok & 0x60) != 0 : mA > 20;
+		bool external = haveChg ? ((intok & 0x60) != 0 || ((dtls0 >> 5) & 3) == 3) : mA > 20;
 		unsigned state = dtls & 0x0f;
-		bool charging = external && (haveChg ? state <= 3 : mA > 0);
-		bool full = external && ((haveChg && state == 4) || percent >= 100);
+		bool charging = external && (haveChg ? state <= 2 : mA > 0);
+		bool full = external && ((haveChg && (state == 3 || state == 4)) || percent >= 100);
 
 		setBatteryInstalled(true);
 		setExternalConnected(external);
@@ -172,11 +178,15 @@ class B2LBattery : public IOPMPowerSource {
 			fPublished = true;
 			registerService();
 		}
-		if (percent != fLastPercent || fLogs < 2) {
+		/* One line when the level or the charger state changes (the first two always), not every poll. */
+		uint32_t chgState = (uint32_t)intok << 16 | (uint32_t)dtls0 << 8 | dtls;
+		if (percent != fLastPercent || chgState != fLastChg || fUpdates < 2) {
 			fLastPercent = percent;
-			IOLog("B2L BATTERY: %u %% %u mV %d mA cap %u/%u mAh external=%d charging=%d full=%d (int_ok=0x%x dtls=0x%x chg=%d)\n",
-			    percent, mV, mA, repcap, fullcap, external, charging, full, intok, dtls, haveChg);
+			fLastChg = chgState;
+			IOLog("B2L BATTERY: %u %% %u mV %d mA cap %u/%u mAh external=%d charging=%d full=%d (int_ok=0x%x dtls00=0x%x dtls01=0x%x chg=%d)\n",
+			    percent, mV, mA, repcap, fullcap, external, charging, full, intok, dtls0, dtls, haveChg);
 		}
+		fUpdates++;
 	}
 
 	/* exynos-usi-v2 + i2c-exynos5 exynos5_i2c_set_timing() (fast mode). Returns false when the block does not take
