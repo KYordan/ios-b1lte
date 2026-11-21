@@ -11,6 +11,8 @@ out/
 *.kernelcache
 *.kc
 *.dtb
+# Board DTBs sanitized with tools/b1l/sanitize-dtb.py (no /chosen identifiers)
+!boards/*/*.dtb
 *.fd
 .DS_Store
 

@@ -1,0 +1,224 @@
+# Build XNU, the board UEFI firmware with the embedded XnuLoader, and boot.img on a GitHub
+# macOS runner, so no local Mac is needed. Adapted from zekasio/beyond2lte-ios
+# (.github/workflows/build.yml, S10+), pinned to the Mu-Silicium and UEFI overlay revisions
+# the S10 build used (docs/journal/build-b1l-0001.md, build-b1l-0003.md).
+#
+# Nothing from iOS is built or uploaded here: the root and SYSTEM images contain Apple's
+# binaries and are made locally from the IPSW (tools/b1l/build-ios-root.sh), never as
+# artifacts of this public repository. The Wi-Fi MAC stays out of boot.img
+# (no --wifi-mac-file).
+name: Build boot.img (XNU + UEFI)
+
+on:
+  workflow_dispatch:
+    inputs:
+      board:
+        description: Target board (scripts/b2l_board.py); its DTB must be in boards/<board>/
+        type: choice
+        options: [beyond0lte, beyond1lte]
+        default: beyond0lte
+      enable_touch:
+        description: Initialize sec_ts in UEFI before the XNU handoff (B2LTouchDxe)
+        type: boolean
+        default: true
+      runner:
+        description: macOS runner image
+        type: choice
+        options: [macos-15, macos-26]
+        default: macos-15
+  push:
+    branches: [beyond0lte]
+    paths:
+      - 'xnu-overlay/**'
+      - 'patches/**'
+      - 'uefi/**'
+      - 'common/**'
+      - 'boards/**'
+      - 'scripts/**'
+      - '.github/workflows/build-boot.yml'
+
+env:
+  XNU_COMMIT: ac9718fb1af618d5ce8678d0dc6e8a58f252216f
+  AVAILABILITY_COMMIT: 149b1777f3e8c2133042d8e188f72e3adf6a7110
+  LIBDISPATCH_COMMIT: 701f4d1a24ae9c6863901bbbb22624b7d1b87321
+  MU_SILICIUM_COMMIT: a8ca6f0d63709a55f66e8f68b0356da4a7cc75d5
+  UEFI_OVERLAY_COMMIT: 42412d049040ceafe644eeca21bb8fa650ebf472   # codex/touch-from-8549bfa
+  KDK_DEFAULT_URL: https://github.com/dortania/KdkSupportPkg/releases/download/25F71/Kernel_Debug_Kit_26.5_build_25F71.dmg
+
+jobs:
+  build:
+    name: XNU + ${{ inputs.board || 'beyond0lte' }} UEFI + boot.img
+    runs-on: ${{ inputs.runner || 'macos-15' }}
+    timeout-minutes: 150
+    env:
+      B2L_BOARD: ${{ inputs.board || 'beyond0lte' }}
+      B2L_ENABLE_TOUCH: ${{ (github.event_name != 'workflow_dispatch' || inputs.enable_touch) && '1' || '0' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Workspace paths and board profile
+        run: |
+          mkdir -p out/kdk out/deps out/build-env out/mu out/ci-boot
+          {
+            echo "KDKROOT=$GITHUB_WORKSPACE/out/kdk"
+            echo "B2L_DEPSROOT=$GITHUB_WORKSPACE/out/deps"
+            echo "B2L_BUILD_ENV=$GITHUB_WORKSPACE/out/build-env"
+            echo "MU_WORK_TREE=$GITHUB_WORKSPACE/out/mu"
+            echo "BUILD_JOBS=$(sysctl -n hw.ncpu)"
+            echo "BUILD_MEMORY_BYTES=$(sysctl -n hw.memsize)"
+          } >> "$GITHUB_ENV"
+          python3 scripts/b2l_board.py shell | tee -a "$GITHUB_ENV"
+          test -f "boards/$B2L_BOARD/$B2L_BOARD.dtb" || { echo "missing boards/$B2L_BOARD/$B2L_BOARD.dtb (tools/b1l/sanitize-dtb.py)"; exit 1; }
+
+      - name: Toolchain
+        run: |
+          brew update
+          brew install llvm lld nasm acpica rsync
+          mkdir -p out/llvm-bin
+          ln -sf "$(brew --prefix llvm)/bin/"* out/llvm-bin/
+          ln -sf "$(brew --prefix lld)/bin/lld-link" out/llvm-bin/lld-link
+          ln -sf "$(brew --prefix lld)/bin/ld.lld" out/llvm-bin/ld.lld
+          echo "CLANG_BIN=$GITHUB_WORKSPACE/out/llvm-bin" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/out/llvm-bin" >> "$GITHUB_PATH"
+          python3 -m venv out/venv
+          out/venv/bin/python -m pip install --quiet --upgrade pip
+          echo "PYTHON_COMMAND=$GITHUB_WORKSPACE/out/venv/bin/python" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-path
+          xcrun --sdk iphoneos --show-sdk-path
+
+      - name: Free runner disk
+        run: |
+          sudo rm -rf /Users/runner/Library/Android /usr/local/share/dotnet || true
+          df -h /
+
+      - name: Restore KDK cache
+        id: cache-kdk
+        uses: actions/cache/restore@v4
+        with:
+          path: out/kdk
+          key: b2l-kdk-25f71-v1
+
+      - name: KDK 26.5 (25F71)
+        if: steps.cache-kdk.outputs.cache-hit != 'true'
+        env:
+          KDK_URL: ${{ secrets.KDK_URL }}
+        run: |
+          url="${KDK_URL:-$KDK_DEFAULT_URL}"
+          curl -fSL --retry 3 "$url" -o out/kdk.dmg
+          mnt="$(mktemp -d)"; exp="$(mktemp -d)"
+          hdiutil attach out/kdk.dmg -mountpoint "$mnt" -nobrowse -readonly
+          pkg="$(find "$mnt" -maxdepth 1 -name '*.pkg' | head -n 1)"
+          pkgutil --expand-full "$pkg" "$exp/kdk" || true
+          for sub in KDK.pkg KDK_SDK.pkg; do
+            if [[ -d "$exp/kdk/$sub/Payload" ]]; then rsync -a "$exp/kdk/$sub/Payload/" "$KDKROOT/"; fi
+          done
+          if [[ ! -d "$KDKROOT/System/Library/Frameworks/Kernel.framework" && -d "$exp/kdk/Payload" ]]; then
+            rsync -a "$exp/kdk/Payload/" "$KDKROOT/"
+          fi
+          hdiutil detach "$mnt" -force || true
+          rm -f out/kdk.dmg
+          test -d "$KDKROOT/System/Library/Frameworks/Kernel.framework"
+
+      - name: Save KDK cache
+        if: steps.cache-kdk.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: out/kdk
+          key: b2l-kdk-25f71-v1
+
+      - name: Mu-Silicium + beyond2lte overlay + board platform
+        run: |
+          git clone -q https://github.com/Project-Silicium/Mu-Silicium.git "$MU_WORK_TREE"
+          git -C "$MU_WORK_TREE" checkout -q --detach "$MU_SILICIUM_COMMIT"
+          git -C "$MU_WORK_TREE" submodule update -q --init --recursive
+          if [[ ! -d "$MU_WORK_TREE/Silicium-ACPI/SoCs" ]]; then
+            rm -rf "$MU_WORK_TREE/Silicium-ACPI"
+            git clone -q https://github.com/Project-Silicium/Silicium-ACPI.git "$MU_WORK_TREE/Silicium-ACPI"
+          fi
+          git clone -q https://github.com/orhunnx/beyond2lte-uefi.git out/uefi-overlay
+          git -C out/uefi-overlay checkout -q --detach "$UEFI_OVERLAY_COMMIT"
+          rsync -a out/uefi-overlay/mu-silicium-overlay/ "$MU_WORK_TREE/"
+          if [[ -d out/uefi-overlay/silicium-acpi-overlay ]]; then
+            rsync -a out/uefi-overlay/silicium-acpi-overlay/ "$MU_WORK_TREE/Silicium-ACPI/"
+          fi
+          test -f "$MU_WORK_TREE/Platforms/Samsung/beyond2ltePkg/beyond2lte.dsc"
+          test -f "$MU_WORK_TREE/BootShim/BootShim.S"
+          if [[ "$B2L_BOARD" != beyond2lte ]]; then
+            python3 scripts/make-board-platform.py --board "$B2L_BOARD" --mu "$MU_WORK_TREE" \
+              --dtb "boards/$B2L_BOARD/$B2L_BOARD.dtb"
+          fi
+          make -s -C "$MU_WORK_TREE/Mu_Basecore/BaseTools/Source/C" -j"$BUILD_JOBS"
+
+      - name: XNU source (pinned, patched, overlay)
+        run: |
+          scripts/fetch-xnu.sh "$GITHUB_WORKSPACE/xnu"
+          scripts/prepare-xnu.sh "$GITHUB_WORKSPACE/xnu"
+          # The kernel never boots earlier than its build time (B2LPlatformExpert::getGMTTimeOfDay)
+          echo "#define B2L_BUILD_EPOCH $(date +%s)" > xnu/iokit/Kernel/arm/b2l_build_epoch.h
+
+      - name: AvailabilityVersions and libfirehose_kernel
+        run: |
+          mkdir -p "$B2L_BUILD_ENV/src" "$B2L_DEPSROOT/usr/local/libexec" \
+            "$B2L_DEPSROOT/usr/local/include/firehose" "$B2L_DEPSROOT/usr/local/include/os" \
+            "$B2L_DEPSROOT/usr/local/include/kernel/firehose" "$B2L_DEPSROOT/usr/local/include/kernel/os" \
+            "$B2L_DEPSROOT/usr/local/lib/kernel"
+          fetch_pinned() {  # REPO COMMIT DIR
+            git init -q "$3"; git -C "$3" fetch -q --depth 1 "https://github.com/apple-oss-distributions/$1.git" "$2"
+            git -C "$3" checkout -q FETCH_HEAD
+          }
+          fetch_pinned AvailabilityVersions "$AVAILABILITY_COMMIT" "$B2L_BUILD_ENV/src/AvailabilityVersions"
+          make -C "$B2L_BUILD_ENV/src/AvailabilityVersions" install DSTROOT="$B2L_DEPSROOT"
+          fetch_pinned libdispatch "$LIBDISPATCH_COMMIT" "$B2L_BUILD_ENV/src/libdispatch"
+          make -C "$GITHUB_WORKSPACE/xnu" SDKROOT=macosx KDKROOT="$KDKROOT" \
+            ARCH_CONFIGS=ARM64 TARGET_CONFIGS="DEVELOPMENT ARM64 B2L" \
+            PLATFORM=iPhoneOS PLATFORM_FOR_CONFIG=iPhoneOS SDKVERSION=26.5 \
+            OBJROOT="$GITHUB_WORKSPACE/out/xnu-hdrs/obj" SYMROOT="$GITHUB_WORKSPACE/out/xnu-hdrs/sym" \
+            DSTROOT="$B2L_DEPSROOT" installhdrs || true
+          rsync -a "$B2L_BUILD_ENV/src/libdispatch/private/firehose/" "$B2L_DEPSROOT/usr/local/include/firehose/" || true
+          rsync -a "$B2L_BUILD_ENV/src/libdispatch/os/" "$B2L_DEPSROOT/usr/local/include/os/" || true
+          rsync -a "$B2L_DEPSROOT/usr/local/include/firehose/" "$B2L_DEPSROOT/usr/local/include/kernel/firehose/" || true
+          rsync -a "$B2L_DEPSROOT/usr/local/include/os/" "$B2L_DEPSROOT/usr/local/include/kernel/os/" || true
+          printf 'export KDKROOT="%s"\nexport B2L_DEPSROOT="%s"\n' "$KDKROOT" "$B2L_DEPSROOT" > "$B2L_BUILD_ENV/env.sh"
+          bash scripts/build-firehose.sh
+
+      - name: Host tests (loader ASan/UBSan, board profiles)
+        run: |
+          scripts/test-loader.sh
+          python3 tests/test_board_profiles.py
+          python3 tests/test_prepare_boot_firmware.py
+
+      - name: XNU kernel (DEVELOPMENT ARM64 B2L)
+        run: scripts/build-kernel.sh CWARNFLAGS=-w CXXWARNFLAGS=-w
+
+      - name: XnuLoader + ${{ env.B2L_BOARD }} firmware
+        run: WORKSPACE="$MU_WORK_TREE" scripts/build-boot-firmware.sh
+
+      - name: Package and verify boot.img
+        run: |
+          kernel="out/xnu/obj/DEVELOPMENT_ARM64_B2L/mach.development.b2l"
+          fd="$MU_WORK_TREE/Build/${B2L_BOARD}Pkg/RELEASE_CLANGPDB/FV/SILICIUM_UEFI.fd"
+          loader="$MU_WORK_TREE/Build/B2LXnu/RELEASE_CLANGPDB/AARCH64/XnuLoader.efi"
+          test -f "$kernel" && test -f "$fd" && test -f "$loader"
+          python3 scripts/package-boot.py --mu "$MU_WORK_TREE" --firmware "$fd" --kernel "$kernel" \
+            --loader "$loader" --output-dir out/ci-boot \
+            --max-image-bytes "$B2L_BOOT_BYTES" --boot-partition-bytes "$B2L_BOOT_BYTES"
+          python3 scripts/package-boot.py --verify out/ci-boot/boot.img
+          cp "$kernel" "$fd" "$loader" out/ci-boot/
+          cd out/ci-boot && shasum -a 256 boot.img mach.development.b2l SILICIUM_UEFI.fd XnuLoader.efi | tee SHA256SUMS
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.B2L_BOARD }}-boot-${{ github.run_number }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            out/ci-boot/boot.img
+            out/ci-boot/manifest.json
+            out/ci-boot/SHA256SUMS
+            out/ci-boot/mach.development.b2l
+            out/ci-boot/SILICIUM_UEFI.fd
+            out/ci-boot/XnuLoader.efi
