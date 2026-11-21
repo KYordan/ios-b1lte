@@ -162,8 +162,21 @@ MU_WORK="$MU_WORK" bash tools/b1l/b1l-build.sh 0001 b2l-metal-v1
 
 Before the first write: TWRP for `beyond0lte`, `tools/flash-kit/backup-partitions.sh`, and `OEM LOCK`/`KG STATE` checked in Download mode.
 
+## First boot (2026-11-21)
+
+Images: CI run 44894733432 `boot.img` (sha256 `a7a22ac0…`), Linux-built USERDATA root (`f0b05ed8…`) and
+SYSTEM (`96c89bb4…`), flashed from WSL in TWRP with `flash-chunked.sh` / `flash-boot.sh`, every chunk read back.
+
+- S-Boot accepts the BOOT image; `beyond0ltePkg` UEFI starts; the boot menu draws on the 1080 × 2280 panel.
+- XNU starts with the 6 GiB RAM profile, mounts the Linux-made HFSX root, launchd runs.
+- Apple logo, then the iOS 26 lock screen (wallpaper, clock from the RTC, default Cupertino time zone).
+- Touch works: sec_ts **Y761** behaves like the S10's Y771 (open question 3 closed).
+- The `b2l_prof` sampler (built again by 0109) prints `B2L PROF WAIT` stacks of backboardd on the
+  console every 10 s, over the bottom of the UI. A red SpringBoard status bar reads `rdar:45025538`.
+
 ## Open questions
 
 1. Does the external Mu `MemoryMapLib` describe DDR up to `0xA00000000`, or does RamManagerDxe read the real size? The absent-DDR reservation covers either case `[VERIFY]` on the first UEFI boot.
 2. The GOP stride on the S10e (1080 or padded) `[VERIFY]` from the loader log.
-3. sec_ts Y761 behaves like the S10's Y771 `[VERIFY]` on the first boot with touch.
+3. ~~sec_ts Y761 behaves like the S10's Y771~~: yes, touch works (first boot).
+4. Wi-Fi module (Semco vs Murata NVRAM) `[VERIFY]` from the `B2L WIFI` OTP log.
