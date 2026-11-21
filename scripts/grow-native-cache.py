@@ -6,7 +6,7 @@ Never opens block devices or flashes a phone. Retain the full source image too.
 The target filesystem must have enough allocation space in at most eight inline extents. On error,
 stop and recreate the staged image from its untouched full backup.
 """
-import argparse,fcntl,json,os,stat,struct,zlib,shutil
+import argparse,fcntl,json,os,stat,struct,sys,zlib,shutil
 from pathlib import Path
 HEADER=8192;CELL=24576
 
@@ -43,7 +43,9 @@ def main():
  a.cache.unlink()
  with a.cache.open('xb') as f:
   # Darwin fstore_t: allocate the entire data fork, or fail; the validated HFS view maps up to eight extents.
-  fcntl.fcntl(f.fileno(),42,struct.pack('=IIqqq',4,3,0,a.bytes,0))
+  # Linux has no F_PREALLOCATE (and hfsplus no fallocate): the sequential write below on the otherwise
+  # empty SYSTEM volume allocates contiguously; tools/b1l/linux/check-cache-extents verifies it.
+  if sys.platform=='darwin':fcntl.fcntl(f.fileno(),42,struct.pack('=IIqqq',4,3,0,a.bytes,0))
   f.truncate(a.bytes)
   h=bytearray(4096);h[:8]=b'B2LNC002';struct.pack_into('<IIII',h,8,2,0,12288,(a.bytes-HEADER)//CELL)
   h[24:36]=d['root'];struct.pack_into('<QQII',h,36,a.bytes,1,d['used'],0);struct.pack_into('<I',h,60,zlib.crc32(h[:60]))

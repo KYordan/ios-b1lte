@@ -65,7 +65,12 @@ def main():
                 continue
             # Symlinks keep their own owner/mode: never follow them.
             os.lchown(d, st.st_uid, st.st_gid)
-            os.chmod(d, stat.S_IMODE(st.st_mode), follow_symlinks=False)
+            try:
+                os.chmod(d, stat.S_IMODE(st.st_mode), follow_symlinks=False)
+            except (NotImplementedError, OSError):
+                # Linux cannot change a symlink's own mode (no lchmod); it stays 0777.
+                if not stat.S_ISLNK(st.st_mode):
+                    raise
             os.utime(d, ns=(st.st_atime_ns, st.st_mtime_ns), follow_symlinks=False)
     # Directory metadata last, deepest first, so later writes do not change it.
     for out, st in reversed(dirs):
