@@ -66,7 +66,17 @@ python3 "$repo_root/scripts/apply-board-patches.py" "$xnu_path" \
   "$repo_root/patches/0056-b2l-scalar-pacga-siphash.patch" \
   "$repo_root/patches/0057-b2l-scoped-coregraphics-backtrace.patch" \
   "$repo_root/patches/0058-b2l-owned-launch-cache.patch" \
-  "$repo_root/patches/0059-b2l-typed-critical-exit.patch"
+  "$repo_root/patches/0059-b2l-typed-critical-exit.patch" \
+  "$repo_root/patches/0100-b2l-installd-apfs-fstype.patch" \
+  "$repo_root/patches/0101-b2l-report-arm64e-host-subtype.patch" \
+  "$repo_root/patches/0102-b2l-hfs-decmpfs-zlib-stored.patch" \
+  "$repo_root/patches/0103-b2l-kernel-rename-excl.patch" \
+  "$repo_root/patches/0104-b2l-mali-service-build.patch" \
+  "$repo_root/patches/0105-b2l-phys-cache-op-unowned-page.patch" \
+  "$repo_root/patches/0106-b2l-pmap-owned-ram-is-dram-and-ptoa.patch" \
+  "$repo_root/patches/0107-b2l-metal-accel-build.patch" \
+  "$repo_root/patches/0108-b2l-el0-cache-maintenance.patch" \
+  "$repo_root/patches/0109-b2l-register-overlay-sources.patch"
 # New files have separate provenance and are kept as an overlay. A few overlay files are
 # complete replacements of upstream XNU files (sys_generic.c, kern_event.c, rtsock.c,
 # OSKext.cpp, corecrypto_sha1.c, IOUserClient.cpp; the last already carries patch 0004).

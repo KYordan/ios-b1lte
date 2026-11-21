@@ -1,0 +1,71 @@
+Build the overlay sources the S10 build listed by hand in its local xnu tree
+(B1L-0113 b2l_prof.c, 0140 B2LWifi, 0152 HakiOS network, 0163 b2l_wpa.c,
+0202 b2l_ccsha1_ltc.c, 0210 B2LBluetooth) and start B2LWifi and B2LBluetooth
+on IOResources, as docs/bluetooth/plan.md describes.
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 5d3ca204..242c0d16 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -107,6 +107,10 @@ bsd/dev/b2l_ufs_core.c			optional b2l
+ bsd/dev/b2l_ufs_disk.c			optional b2l
+ bsd/dev/b2l_ufs_transport.c		optional b2l
+ bsd/dev/b2l_mali_core.c			optional b2l
++bsd/dev/b2l_hakios_net.c		optional b2l
++bsd/dev/b2l_hakios_sta.c		optional b2l
++bsd/dev/b2l_hakios_apple80211.c		optional b2l
++bsd/dev/b2l_wpa.c			optional b2l
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
+index faa5f0fd..55686fc7 100644
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -48,6 +48,8 @@ const char * gIOKernelConfigTables =
+     "     'IOProviderClass' = IOPlatformDevice;"
+     "     'IONameMatch' = 'b2l,boot-cpu';"
+     "   },"
++    "   {'IOClass'=B2LWifi;'IOProviderClass'=IOResources;'IOMatchCategory'=B2LWifi;},"
++    "   {'IOClass'=B2LBluetooth;'IOProviderClass'=IOResources;'IOMatchCategory'=B2LBluetooth;},"
+     "   {"
+     "     'IOClass' = AppleKeyStore;"
+     "     'IOProviderClass' = IOResources;"
+diff --git a/iokit/conf/files b/iokit/conf/files
+index 4f551e6e..71f4697f 100644
+--- a/iokit/conf/files
++++ b/iokit/conf/files
+@@ -175,6 +175,9 @@ iokit/Kernel/arm/B2LWatchdog.cpp optional iokitcpp b2l
+ iokit/Kernel/arm/B2LSurface.cpp optional iokitcpp b2l
+ iokit/Kernel/arm/B2LMaliService.cpp optional iokitcpp b2l
+ iokit/Kernel/arm/B2LMetalAccel.cpp optional iokitcpp b2l
++iokit/Kernel/arm/B2LWifi.cpp optional iokitcpp b2l
++iokit/Kernel/arm/B2LHakiosWLAN.cpp optional iokitcpp b2l
++iokit/Kernel/arm/B2LBluetooth.cpp optional iokitcpp b2l
+ iokit/Kernel/arm/B2LFramebuffer.cpp optional iokitcpp b2l
+ iokit/Kernel/arm/hid/B2LHID.cpp optional iokitcpp b2l
+ iokit/Kernel/arm/hid/IOHIDEvent.cpp optional iokitcpp b2l
+diff --git a/osfmk/conf/files b/osfmk/conf/files
+index 84cb800e..aed3ee41 100644
+--- a/osfmk/conf/files
++++ b/osfmk/conf/files
+@@ -404,6 +404,7 @@ osfmk/corecrypto/ccsha512_initial_state.c	standard
+ osfmk/corecrypto/ccsha512_K.c	standard
+ osfmk/corecrypto/ccsha512_ltc_compress.c	standard
+ osfmk/corecrypto/ccsha512_ltc_di.c	standard
++osfmk/corecrypto/b2l_ccsha1_ltc.c	optional b2l
+ 
+ osfmk/prng/prng_random.c	standard
+ osfmk/prng/entropy.c   standard
+diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
+index 058de025..e5ea4228 100644
+--- a/osfmk/conf/files.arm64
++++ b/osfmk/conf/files.arm64
+@@ -132,6 +132,7 @@ osfmk/kern/ecc_logging.c	optional config_ecc_logging
+ osfmk/kern/memory_error_logging.c	standard
+ 
+ osfmk/arm64/b2l_early.c optional b2l
++osfmk/arm64/b2l_prof.c optional b2l
+ 
+ osfmk/arm64/b2l_log_core.c optional b2l
+ osfmk/arm64/b2l_persistent_log.c optional b2l

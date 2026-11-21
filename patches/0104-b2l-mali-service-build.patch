@@ -1,11 +1,26 @@
 B1L-0029 (GPU G3): build the HakiOS-derived Mali core and IOKit service.
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index f72971a8..5d3ca204 100644
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
-@@
+@@ -106,6 +106,7 @@ bsd/dev/memdev.c			standard
+ bsd/dev/b2l_ufs_core.c			optional b2l
+ bsd/dev/b2l_ufs_disk.c			optional b2l
  bsd/dev/b2l_ufs_transport.c		optional b2l
 +bsd/dev/b2l_mali_core.c			optional b2l
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/iokit/conf/files b/iokit/conf/files
+index c8b53335..5769a619 100644
 --- a/iokit/conf/files
 +++ b/iokit/conf/files
-@@
+@@ -173,6 +173,7 @@ iokit/Kernel/arm/b2l_aks_core.c optional b2l
+ iokit/Kernel/arm/B2LWatchdog.cpp optional iokitcpp b2l
+ 
  iokit/Kernel/arm/B2LSurface.cpp optional iokitcpp b2l
 +iokit/Kernel/arm/B2LMaliService.cpp optional iokitcpp b2l
+ iokit/Kernel/arm/B2LFramebuffer.cpp optional iokitcpp b2l
+ iokit/Kernel/arm/hid/B2LHID.cpp optional iokitcpp b2l
+ iokit/Kernel/arm/hid/IOHIDEvent.cpp optional iokitcpp b2l
