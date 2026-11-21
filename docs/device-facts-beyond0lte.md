@@ -82,7 +82,7 @@ comes from the UEFI GOP, so the kernel is unaffected, but everything sized for 1
 | UEFI memory map | `prepare-boot-firmware.py` takes the board's DT evidence and reserves `0x980000000+0x80000000` as absent DDR on top of the two low-bank gaps |
 | Loader RAM | `B2L_RAM_ALLOW_END` (`b2l_ram_ranges.h`, `Arena.h`) = `0x97E000000` for the S10e, passed by `build-efi.sh` from `B2L_BOARD`; the kernel keeps the S10 superset, the loader decides |
 | UEFI platform | `make-board-platform.py --board beyond0lte` builds `beyond0ltePkg` and retargets the frame-buffer PCDs to 1080 × 2280 (stops if it cannot find them) |
-| Display | Loader accepted GOPs ≥ 1184 px only: now ≥ 768 px with a narrow progress panel. Boot menu has a compact layout below 2600 px. Default iOS canvas 750 × 1584 @2x (375 × 792 pt) |
+| Display | Loader accepted GOPs ≥ 1184 px only: now ≥ 768 px with a narrow progress panel. Boot menu has a compact layout below 2600 px. iOS canvas 880 × 1912 @2x (440 × 956 pt, the iPhone17,2 layout, as on the S10; ~3 % wider than the panel's aspect). The first boot used 750 × 1584 and SpringBoard left the lower third unrendered |
 | Flash tools | Every guard (model, block, size) reads `board.sh`. `tools/flash-kit` also fixed: `$adb` was never set, `UID` is read-only in bash, block paths were compared without `/dev/block/`, vbmeta was sda11 |
 | SYSTEM image | `build-system-image.sh` sizes from the board; ~164 MiB stay free next to the 5.52 GiB native cache (`NATIVE_CACHE_MIB` to shrink it) |
 

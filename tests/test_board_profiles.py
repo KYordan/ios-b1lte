@@ -65,15 +65,19 @@ class BoardProfiles(unittest.TestCase):
         self.assertEqual(p['ram_end'], 0x97E000000)
         self.assertEqual(p['panel'], (1080, 2280))
         w, h = p['fb_logical']
-        self.assertEqual((w % 2, h % 2), (0, 0))
-        # Logical canvas keeps the panel's aspect ratio within a pixel.
-        self.assertLess(abs(h - w * 2280 / 1080), 1.0)
+        # iOS draws for the iPhone17,2 points (440 x 956) at the board scale, as on the S10.
+        self.assertEqual((w, h), (440 * p['display_scale'], 956 * p['display_scale']))
+        self.assertEqual(b2l_board.profile('beyond1lte')['fb_logical'], (w, h))
+        # The loader accepts at most 2x downscaling and never more than the panel.
+        self.assertTrue(1080 / 2 <= w <= 1080 and 2280 / 2 <= h <= 2280)
+        # Aspect error on the 1080 x 2280 panel stays small (about 3 %).
+        self.assertLess(abs((w / h) / (1080 / 2280) - 1), 0.04)
 
     def test_board_cli(self):
         out = subprocess.run([sys.executable, str(ROOT / 'scripts/b2l_board.py'), 'shell'],
                              env={**os.environ, 'B2L_BOARD': 'beyond0lte'}, capture_output=True, text=True, check=True)
         self.assertIn('B2L_RAM_ALLOW_END=0x97E000000ULL', out.stdout)
-        self.assertIn('B2L_FB_LOGICAL=750x1584', out.stdout)
+        self.assertIn('B2L_FB_LOGICAL=880x1912', out.stdout)
 
     def test_ram_header_default_and_kernel_copy(self):
         common = (ROOT / 'common/memory/b2l_ram_ranges.h').read_bytes()

@@ -50,7 +50,10 @@ BOARDS = {
         'ram_end': 0x97E000000,
         'absent_ddr': ((0xBAB00000, 0x5500000), (0xE0000000, 0x1900000),
                        (0x980000000, 0x80000000)),
-        'panel': (1080, 2280), 'fb_logical': (750, 1584), 'display_scale': 2,
+        # iOS lays out for the iPhone17,2 identity (440 x 956 pt): the canvas must be
+        # 880 x 1912 @2x as on the S10. 750 x 1584 (the panel's own aspect) left the bottom
+        # of SpringBoard unrendered on the first boot; 880 x 1912 stretches ~3 % in width.
+        'panel': (1080, 2280), 'fb_logical': (880, 1912), 'display_scale': 2,
     },
 }
 
