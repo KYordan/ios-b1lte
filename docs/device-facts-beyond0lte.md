@@ -86,8 +86,8 @@ comes from the UEFI GOP, so the kernel is unaffected, but everything sized for 1
 | Flash tools | Every guard (model, block, size) reads `board.sh`. `tools/flash-kit` also fixed: `$adb` was never set, `UID` is read-only in bash, block paths were compared without `/dev/block/`, vbmeta was sda11 |
 | SYSTEM image | `build-system-image.sh` sizes from the board; ~164 MiB stay free next to the 5.52 GiB native cache (`NATIVE_CACHE_MIB` to shrink it) |
 
-Not verified: no build ran (needs the Mac toolchain), no flash, no boot. The C host tests changed here
-(`progress_test.c`, `boot_menu_draw_test.c`) were not compiled on the Windows host.
+Since then the S10e has been built on GitHub Actions and booted many times; results are in
+[First boot](#first-boot-2026-11-21) and [Boots since](#boots-since-the-first-one).
 
 ## Building for the S10e
 
@@ -172,11 +172,30 @@ SYSTEM (`96c89bb4…`), flashed from WSL in TWRP with `flash-chunked.sh` / `flas
 - Apple logo, then the iOS 26 lock screen (wallpaper, clock from the RTC, default Cupertino time zone).
 - Touch works: sec_ts **Y761** behaves like the S10's Y771 (open question 3 closed).
 - The `b2l_prof` sampler (built again by 0109) prints `B2L PROF WAIT` stacks of backboardd on the
-  console every 10 s, over the bottom of the UI. A red SpringBoard status bar reads `rdar:45025538`.
+  console every 10 s, over the bottom of the UI. A red SpringBoard status bar reads `rdar:45025538`
+  (not seen in the photos of builds 7 and 8).
+
+## Boots since the first one
+
+Build numbers are GitHub Actions runs of `build-boot.yml`; only `boot.img` (`sda14`) changed, written and read back from TWRP.
+
+| Build | Change | Result on the phone |
+| --- | --- | --- |
+| 7 | iOS canvas 880 × 1912 @2x (the iPhone17,2 layout) instead of 750 × 1584 | iOS laid out completely, but only the top 1912 of 2280 panel rows were drawn: the old console stayed below |
+| 8 | The scaled copy maps the whole panel (it used `fSurface`'s mapping, sized for the logical rows, and wrote ~1.6 MB a frame past it); `haltRestart()` through the PMU; boot menu with *Power off*, 10 s countdown, S10e layout | **Full screen**, dock visible. Power off no longer panics ("Halt/Restart Timed Out") but restarts |
+| 11 | ACPM stop before `PS_HOLD` (Samsung `exynos_acpm_reboot`); battery driver | Power off still restarts; log: battery bus "has no timings" (left unconfigured by the bootloader) |
+| 12 | WTSR/SMPL disarmed through ACPM before power off (Samsung `s2m_rtc_shutdown`); battery bus set up (USI_CMGP03 I2C mode, USI reset released, fast-mode timings) | not tested yet |
+
+Seen on boot 8–11, still open: the power button dims and freezes the picture instead of turning the display off
+(backboardd calls IOMobileFramebuffer selector 79 with 0x40, answered *unsupported*); *Settings → General → About*
+shows *Capacity: Zero KB* (no IOMedia for the UFS disk) with the right *Available*; widgets stay at "Waiting…";
+app-switcher snapshots are black; the GL/Metal userland is not on the S10e SYSTEM image (`B2L GL: publication error=2`).
 
 ## Open questions
 
 1. Does the external Mu `MemoryMapLib` describe DDR up to `0xA00000000`, or does RamManagerDxe read the real size? The absent-DDR reservation covers either case `[VERIFY]` on the first UEFI boot.
-2. The GOP stride on the S10e (1080 or padded) `[VERIFY]` from the loader log.
+2. ~~The GOP stride on the S10e~~: 1080 × 2280, stride 4320 (boot 7 log: `AppleCLCD 1080x2280 stride 4320`).
 3. ~~sec_ts Y761 behaves like the S10's Y771~~: yes, touch works (first boot).
 4. Wi-Fi module (Semco vs Murata NVRAM) `[VERIFY]` from the `B2L WIFI` OTP log.
+5. Does `PS_HOLD` low switch the S10e off once WTSR/SMPL are disarmed (build 12)?
+6. Is the CMGP USI clock running when the bootloader leaves the battery bus unconfigured (build 12 logs `B2L BATTERY: bus setup …`)?
