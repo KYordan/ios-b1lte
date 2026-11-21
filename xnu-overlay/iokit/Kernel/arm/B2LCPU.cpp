@@ -6,6 +6,7 @@
 #if defined(B2L)
 #include <IOKit/IOCPU.h>
 #include <IOKit/IOLib.h>
+#include <libkern/libkern.h>   /* printf at halt (b2l_pmic_disable_wtsr_smpl) */
 #include <libkern/c++/OSData.h>
 #include <libkern/c++/OSNumber.h>
 #include <arm64/proc_reg.h>
@@ -395,6 +396,31 @@ extern "C" int64_t b2l_pmic_rtc_seconds(void)
     IOLog("B2L RTC: 20%02u-%02u-%02u %02u:%02u:%02u UTC -> %lld\n", d[6] & 0x7f, d[5] & 0x0f, d[4] & 0x1f,
         d[2] & 0x1f, d[1] & 0x7f, d[0] & 0x7f, t);
     return t;
+}
+
+/* Samsung rtc-s2mps19.c s2m_rtc_shutdown() -> s2m_rtc_disable_wtsr_smpl(): before power off clear WTSR_EN (bit 6)
+ * and SMPL_EN (bit 7) of RTC WTSR_SMPL (0x01) and SUB_SMPL_EN (bit 3) of CAPSEL (0x03). With WTSR armed the PMIC
+ * treats PS_HOLD dropping as a fault and starts the phone again: the S10e restarted on every power off. Same ACPM
+ * MFD path as the RTC read above. 0 when both writes were acknowledged. */
+extern "C" int b2l_pmic_disable_wtsr_smpl(void)
+{
+    struct b2l_acpm a = {};
+    a.sram = (volatile uint8_t *)ml_io_map(B2L_ACPM_SRAM_PA, B2L_ACPM_SRAM_SIZE);
+    a.mbox = (volatile uint8_t *)ml_io_map(B2L_ACPM_MBOX_PA, B2L_ACPM_MBOX_SIZE);
+    if (!a.sram || !a.mbox) return -10;
+    int e = b2l_acpm_parse_ch(&a, 2);
+    if (e) return -20 + e;
+    a.reply = 1;
+    if (b2l_acpm_rd(&a, a.rx_front) < a.len) b2l_acpm_wr(&a, a.rx_rear, b2l_acpm_rd(&a, a.rx_front));
+    uint32_t c[4];
+    if ((e = b2l_mfd(&a, 0x01, 0 /* FUNC_READ */, 0, c))) return -30 + e;
+    uint32_t wtsr = (c[1] >> 8) & 0xff;
+    if ((e = b2l_mfd(&a, 0x01, 1 /* FUNC_WRITE */, wtsr & ~0xc0u, c))) return -40 + e;
+    if ((e = b2l_mfd(&a, 0x03, 0, 0, c))) return -50 + e;
+    uint32_t capsel = (c[1] >> 8) & 0xff;
+    if ((e = b2l_mfd(&a, 0x03, 1, capsel & ~0x08u, c))) return -60 + e;
+    printf("B2L PM: WTSR/SMPL 0x%02x -> 0x%02x, CAPSEL 0x%02x -> 0x%02x\n", wtsr, wtsr & ~0xc0u, capsel, capsel & ~0x08u);
+    return 0;
 }
 
 /* Samsung exynos_acpm_reboot() -> acpm_enter_wfi(): before every restart or PS_HOLD power off the AP asks the APM

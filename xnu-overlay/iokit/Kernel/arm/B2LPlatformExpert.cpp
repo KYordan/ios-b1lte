@@ -33,6 +33,7 @@ OSDefineMetaClassAndStructors(B2LPlatformExpert, IODTPlatformExpert);
  * Panic types are left to IOPlatformExpert so a panic stays on screen. */
 extern "C" vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
 extern "C" int b2l_acpm_stop(void);   /* B2LCPU.cpp */
+extern "C" int b2l_pmic_disable_wtsr_smpl(void);   /* B2LCPU.cpp */
 #define B2L_PMU_PHYS             0x15860000ULL
 #define B2L_PMU_SIZE             0x4000
 #define B2L_PMU_PS_HOLD_CONTROL  0x030C
@@ -61,6 +62,11 @@ B2LPlatformExpert::haltRestart(unsigned int type)
 {
 	if (b2l_pmu == NULL || (type != kPEHaltCPU && type != kPERestartCPU)) {
 		return IODTPlatformExpert::haltRestart(type);
+	}
+	/* Power off: the PMIC must not take PS_HOLD dropping for a fault (WTSR/SMPL restart it); Samsung's RTC
+	 * driver disarms both in its shutdown hook. Needs the APM, so before the stop below. */
+	if (type == kPEHaltCPU) {
+		printf("B2L PM: WTSR/SMPL disarm %d\n", b2l_pmic_disable_wtsr_smpl());
 	}
 	/* Samsung's exynos_reboot() and sec_power_off() stop the APM firmware first (exynos_acpm_reboot). */
 	int stop = b2l_acpm_stop();

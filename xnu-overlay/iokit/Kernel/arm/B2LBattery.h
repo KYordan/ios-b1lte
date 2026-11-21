@@ -2,8 +2,8 @@
  * Battery for iOS: an IOPMPowerSource (what powerd, SpringBoard and wifid look for; without one iOS showed 0 %)
  * fed by the S10e/S10 MAX77705 fuel gauge and charger. Included by B2LPlatformExpert.cpp, which starts it.
  *
- * Bus: hsi2c@15D60000 (DT /hsi2c@15D60000/max77705@66), the same HSI2C transfer sequence as B2LInput.cpp, reusing the
- * bootloader's bus timings (nothing is written to the PMIC: register reads only). Addresses and registers after
+ * Bus: hsi2c@15D60000 (DT /hsi2c@15D60000/max77705@66), the same HSI2C transfer sequence as B2LInput.cpp; the bus
+ * is set up here when the bootloader left it unconfigured (setupBus). Nothing is written to the PMIC: reads only. Addresses and registers after
  * Samsung's max77705 drivers: fuel gauge 0x36 (RepCap 0x05, RepSOC 0x06, VCell 0x09, Current 0x0A, FullCapRep 0x10),
  * charger 0x69 (CHG_INT_OK 0xB2: CHGIN_OK 0x40, WCIN_OK 0x20; CHG_DETAILS_01 0xB4 low nibble: 0-3 charging, 4 done).
  * Units: RepSOC 1/256 %, VCell 78.125 uV, Current 1.5625 uV / Rsense with DT fuelgauge,fg_resistor 2 (5 mOhm), i.e.
@@ -23,6 +23,14 @@
 #include <kern/clock.h>
 
 #define B2L_BAT_I2C_PA     0x15D60000ULL
+/* The bootloader leaves this bus unconfigured (B1L S10e boot 11: FS timings 0). As Samsung's exynos-usi-v2 and
+ * i2c-exynos5 drivers: USI_CMGP03 mode = I2C in SYSREG_CMGP (DT /usi@15C22030 usi_v2_mode "i2c"), USI_CON reset
+ * released, USI_OPTION clock-stop on, then fast-mode timings from the DT ipclk (default-clk 200 MHz) for 100 kHz. */
+#define B2L_BAT_SYSREG_PA  0x15C22000ULL
+#define B2L_BAT_USI_MODE   0x30u      /* /usi@15C22030 */
+#define B2L_USI_V2_I2C     0x4u
+#define B2L_BAT_IPCLK_HZ   200000000u
+#define B2L_BAT_BUS_HZ     100000u
 #define B2L_BAT_FG         0x36
 #define B2L_BAT_CHG        0x69
 #define B2L_BAT_DESIGN_MAH 3100        /* S10e (EB-BG970ABU) */
@@ -164,6 +172,41 @@ class B2LBattery : public IOPMPowerSource {
 		}
 	}
 
+	/* exynos-usi-v2 + i2c-exynos5 exynos5_i2c_set_timing() (fast mode). Returns false when the block does not take
+	 * the values (clock gated). */
+	bool setupBus()
+	{
+		IOMemoryDescriptor *sd = IOMemoryDescriptor::withPhysicalAddress(B2L_BAT_SYSREG_PA, 4096, kIODirectionInOut);
+		IOMemoryMap *sm = sd ? sd->map(kIOMapInhibitCache) : NULL;
+		uint32_t mode = 0xffffffffu;
+		if (sm) {
+			volatile uint32_t *m = (volatile uint32_t *)(sm->getVirtualAddress() + B2L_BAT_USI_MODE);
+			mode = *m;
+			if ((mode & 7u) != B2L_USI_V2_I2C) {
+				*m = (mode & ~7u) | B2L_USI_V2_I2C;
+				__asm__ volatile ("dsb sy" ::: "memory");
+			}
+		}
+		OSSafeReleaseNULL(sm);
+		OSSafeReleaseNULL(sd);
+		uint32_t con = r(0xC4), opt = r(0xC8);
+		w(0xC4, con & ~1u);                     /* USI_RESET is active high */
+		IODelay(1);
+		w(0xC8, (opt & ~(1u << 1)) | (1u << 2)); /* CLKREQ_ON off, CLKSTOP_ON on */
+		uint32_t ftl = (r(0x40) >> 16) & 7u;
+		uint32_t temp = B2L_BAT_IPCLK_HZ / B2L_BAT_BUS_HZ - 8u - 2u * ftl;
+		uint32_t div = temp / 512u, cycle = temp / (div + 1u) - 2u, l = cycle / 2u, h = cycle / 2u;
+		if (!r(0x60) || !r(0x64)) {
+			w(0x60, l << 24 | l << 16 | l << 8);              /* FS1: start su/hd, stop su */
+			w(0x64, (l / 2u) << 24 | l << 8 | h);             /* FS2: data su, scl low/high */
+			w(0x68, div << 16 | cycle);                       /* FS3: divider, sr release */
+			w(0x6C, l / 2u);                                  /* SLA: data hold */
+		}
+		IOLog("B2L BATTERY: bus setup usi_mode 0x%x->0x%x usi_con 0x%x->0x%x opt 0x%x->0x%x fs 0x%x 0x%x 0x%x sla 0x%x\n",
+		    mode, (mode & ~7u) | B2L_USI_V2_I2C, con, r(0xC4), opt, r(0xC8), r(0x60), r(0x64), r(0x68), r(0x6C));
+		return r(0x60) && r(0x64);
+	}
+
 	static void tick(OSObject *owner, IOTimerEventSource *sender)
 	{
 		B2LBattery *self = (B2LBattery *)owner;
@@ -178,9 +221,9 @@ public:
 		fDesc = IOMemoryDescriptor::withPhysicalAddress(B2L_BAT_I2C_PA, 4096, kIODirectionInOut);
 		fMap = fDesc ? fDesc->map(kIOMapInhibitCache) : NULL;
 		fI2c = fMap ? (volatile uint8_t *)fMap->getVirtualAddress() : NULL;
-		/* Reuse the bootloader's bus timings; never program clocks or dividers here. */
-		if (!fI2c || !r(0x60) || !r(0x64)) {
-			IOLog("B2L BATTERY: hsi2c@15d60000 %s, no battery\n", fI2c ? "has no timings" : "not mapped");
+		/* Bus timings: the bootloader's if it left any, else our own (setupBus). Clocks are never touched. */
+		if (!fI2c || !setupBus()) {
+			IOLog("B2L BATTERY: hsi2c@15d60000 %s, no battery\n", fI2c ? "does not take timings (clock off?)" : "not mapped");
 			return false;
 		}
 		fLoop = IOWorkLoop::workLoop();

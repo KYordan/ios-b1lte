@@ -151,14 +151,22 @@ Reset(BOOLEAN Recovery)
     Print(L"\r\nReboot failed. Hold Power to switch the phone off.\r\n");
 }
 
-/* Samsung's sec_power_off() first stops the APM firmware (exynos_acpm_reboot -> acpm_enter_wfi): one message with
- * cmd[0] = 1 << ACPM_IPC_PROTOCOL_STOP (22) on the DT "acpm" node's channel (4), reply awaited. Without it PS_HOLD
- * low restarted the S10e. Same queue layout as the kernel's B2LACPM.h (framework header at SRAM + 0x7000, 72-byte
- * channel descriptors). Touched only if the firmware maps both regions: an unmapped access would hang the menu. */
+/* Power off as Samsung's kernel does it, in the order it does it:
+ *  1. rtc-s2mps19.c s2m_rtc_shutdown(): clear WTSR_EN (bit 6) and SMPL_EN (bit 7) of the S2MPS19 RTC register
+ *     WTSR_SMPL (0x01) and SUB_SMPL_EN (bit 3) of CAPSEL (0x03). Armed, the PMIC takes PS_HOLD dropping for a fault
+ *     and starts the phone again: the S10e restarted on every power off. The PMIC is reached through the APM
+ *     firmware's MFD service, ACPM channel 2 (DT s2mps19mfd), as the kernel's RTC read does (B2LCPU.cpp b2l_mfd).
+ *  2. sec_power_off() -> exynos_acpm_reboot() -> acpm_enter_wfi(): stop the APM, cmd[0] = 1 << 22 on the DT "acpm"
+ *     node's channel (4), reply awaited.
+ *  3. PS_HOLD low, retried once a second.
+ * The ACPM queues have the kernel's B2LACPM.h layout (framework header at SRAM + 0x7000, 72-byte channel
+ * descriptors). They are touched only if the firmware maps both regions: an unmapped access would hang the menu. */
 #define B2L_ACPM_SRAM         0x02039000ULL
 #define B2L_ACPM_SRAM_SIZE    0x30000u
 #define B2L_ACPM_MBOX         0x15900000ULL
+#define B2L_ACPM_MFD_CH       2u
 #define B2L_ACPM_STOP_CH      4u
+#define B2L_PMIC_RTC_TYPE     0x02u
 
 STATIC BOOLEAN
 Mapped(UINT64 Base, UINT64 Size)
@@ -171,13 +179,16 @@ Mapped(UINT64 Base, UINT64 Size)
 STATIC UINT32 Sram(UINT32 Off) { return MmioRead32(B2L_ACPM_SRAM + Off); }
 STATIC BOOLEAN InSram(UINT32 Off, UINT32 Bytes) { return Off < B2L_ACPM_SRAM_SIZE && Bytes <= B2L_ACPM_SRAM_SIZE - Off && !(Off & 3); }
 
+/* One request on channel Ch and its reply (Samsung __acpm_ipc_send_data + check_response): Cmd[0..3] in, the reply's
+ * first four words out. Only the sequence field (bits 16-21) of Cmd[0] is ours. 0 on a reply, < 0 otherwise. */
 STATIC INTN
-AcpmStop(VOID)
+AcpmXfer(UINT32 Ch, UINT32 Cmd[4])
 {
+    STATIC UINT32 Seq;
     if (!Mapped(B2L_ACPM_SRAM, B2L_ACPM_SRAM_SIZE) || !Mapped(B2L_ACPM_MBOX, 0x1000)) return -1;
     UINT32 Chans = Sram(0x7000 + 8), ApMax = Sram(0x7000 + 24);
-    if (ApMax <= B2L_ACPM_STOP_CH || ApMax > 32 || !InSram(Chans, 72u * ApMax)) return -2;
-    UINT32 C = Chans + 72u * B2L_ACPM_STOP_CH, Ci = C + 16;
+    if (ApMax <= Ch || ApMax > 32 || !InSram(Chans, 72u * ApMax)) return -2;
+    UINT32 C = Chans + 72u * Ch, Ci = C + 16;
     UINT32 Id = Sram(C), TxRear = Sram(Ci), TxFront = Sram(Ci + 4), TxBase = Sram(Ci + 8);
     UINT32 RxRear = Sram(Ci + 24), RxFront = Sram(Ci + 28), RxBase = Sram(Ci + 32), Len = Sram(Ci + 36), Elem = Sram(Ci + 40);
     if (Id >= 16 || Elem < 16 || Elem > 64 || (Elem & 3) || Len < 1 || Len > 64 ||
@@ -192,8 +203,9 @@ AcpmStop(VOID)
         if (Wait > 1500) return -5;   /* 15 ms, as Linux */
         gBS->Stall(10);
     }
-    CONST UINT32 Seq = 1, Cmd0 = (1u << 22) | (Seq << 16);
-    for (UINT32 I = 0; I < Elem / 4; I++) MmioWrite32(B2L_ACPM_SRAM + TxBase + Elem * Front + 4 * I, I ? 0 : Cmd0);
+    if (++Seq >= 64) Seq = 1;
+    Cmd[0] = (Cmd[0] & ~(0x3fu << 16)) | (Seq << 16);
+    for (UINT32 I = 0; I < Elem / 4; I++) MmioWrite32(B2L_ACPM_SRAM + TxBase + Elem * Front + 4 * I, I < 4 ? Cmd[I] : 0);
     ArmDataSynchronizationBarrier();
     MmioWrite32(B2L_ACPM_SRAM + TxFront, Next);
     ArmDataSynchronizationBarrier();
@@ -202,7 +214,9 @@ AcpmStop(VOID)
         UINT32 F = Sram(RxFront), R = Sram(RxRear);
         if (F >= Len || R >= Len) return -6;
         for (UINT32 I = R; I != F; I = (I + 1) % Len) {
-            if (((Sram(RxBase + Elem * I) >> 16) & 0x3f) != Seq) continue;
+            UINT32 At = RxBase + Elem * I;
+            if (((Sram(At) >> 16) & 0x3f) != Seq) continue;
+            for (UINT32 K = 0; K < 4; K++) Cmd[K] = Sram(At + 4 * K);
             R = (R + 1) % Len;
             MmioWrite32(B2L_ACPM_SRAM + RxRear, R);
             if (R == Sram(RxFront)) MmioWrite32(B2L_ACPM_MBOX + 0x20 /* INTCR1 */, 1u << Id);
@@ -213,16 +227,40 @@ AcpmStop(VOID)
     return -7;
 }
 
-/* Returns only when the phone is still on: the result of the ACPM stop, for the menu's note. */
+/* S2MPS19 RTC register through the ACPM MFD service: Func 0 read, 1 write. Reply cmd[1] bits 24-31 = APM status,
+ * bits 8-15 = the byte read. */
 STATIC INTN
-PowerOff(VOID)
+PmicRtc(UINT32 Reg, UINT32 Func, UINT32 Arg, UINT32 *Value)
 {
-    INTN Stop = AcpmStop();
+    UINT32 Cmd[4] = { (B2L_PMIC_RTC_TYPE << 8) | (Reg & 0xff), (Func & 0xff) | ((Arg & 0xff) << 8), 0, 0 };
+    INTN E = AcpmXfer(B2L_ACPM_MFD_CH, Cmd);
+    if (E) return E;
+    if ((Cmd[1] >> 24) & 0xff) return -8;
+    if (Value) *Value = (Cmd[1] >> 8) & 0xff;
+    return 0;
+}
+
+STATIC INTN
+DisarmWtsrSmpl(VOID)
+{
+    UINT32 V;
+    INTN E;
+    if ((E = PmicRtc(0x01, 0, 0, &V)) || (E = PmicRtc(0x01, 1, V & ~0xc0u, NULL))) return E;
+    if ((E = PmicRtc(0x03, 0, 0, &V)) || (E = PmicRtc(0x03, 1, V & ~0x08u, NULL))) return E - 10;
+    return 0;
+}
+
+/* Returns only when the phone is still on. Wtsr / Stop: the two ACPM results, for the menu's note. */
+STATIC VOID
+PowerOff(INTN *Wtsr, INTN *Stop)
+{
+    UINT32 Cmd[4] = { 1u << 22, 0, 0, 0 };
+    *Wtsr = DisarmWtsrSmpl();
+    *Stop = AcpmXfer(B2L_ACPM_STOP_CH, Cmd);
     for (UINTN Try = 0; Try < 3; Try++) {   /* sec_power_off() retries once a second */
         MmioAnd32(B2L_PMU_BASE + B2L_PMU_PS_HOLD, ~B2L_PS_HOLD_DATA);
         gBS->Stall(1000 * 1000);
     }
-    return Stop;
 }
 
 /* Volume up held at start: menu with recovery preselected. Volume down held: menu without countdown. */
@@ -271,11 +309,12 @@ B2lBootMenu(CONST CHAR8 *Note, BOOLEAN NoCountdown)
         if (Action == B2L_ACT_POWEROFF) {
             STATIC CHAR8 Still[96];
             Draw(&Menu, Now, Note, "Switching off...");
-            INTN Stop = PowerOff();
+            INTN Wtsr, Stop;
+            PowerOff(&Wtsr, &Stop);
             /* Still here (on a charger the PMIC keeps the supply): back to the menu, no countdown, with the
-             * ACPM result so a photo says which step did not take. */
-            AsciiSPrint(Still, sizeof(Still), "Still on (charger connected?). Unplug it and try again. [acpm %d]",
-                        (INT32)Stop);
+             * ACPM results so a photo says which step did not take. */
+            AsciiSPrint(Still, sizeof(Still), "Still on (charger connected?). Unplug it and try again. [wtsr %d acpm %d]",
+                        (INT32)Wtsr, (INT32)Stop);
             b2l_menu_init(&Menu, Menu.selected, 0, B2L_START_FORCE_MENU, NowMs());
             Draw(&Menu, NowMs(), Still, NULL);
             continue;
