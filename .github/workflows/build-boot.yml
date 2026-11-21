@@ -3,10 +3,12 @@
 # (.github/workflows/build.yml, S10+), pinned to the Mu-Silicium and UEFI overlay revisions
 # the S10 build used (docs/journal/build-b1l-0001.md, build-b1l-0003.md).
 #
-# Nothing from iOS is built or uploaded here: the root and SYSTEM images contain Apple's
-# binaries and are made locally from the IPSW (tools/b1l/build-ios-root.sh), never as
-# artifacts of this public repository. The Wi-Fi MAC stays out of boot.img
-# (no --wifi-mac-file).
+# No iOS image is built here: the root and SYSTEM images contain Apple's binaries and are
+# made locally from the IPSW (tools/b1l/build-ios-root.sh). The kernel does embed a launch
+# cache derived from the IPSW's launchd.plist (scripts/build-userspace-bootstrap.py), so
+# every artifact is uploaded inside a 7z archive encrypted with the B2L_ARTIFACT_PASSWORD
+# repository secret: artifacts of a public repository are readable by any GitHub user.
+# The Wi-Fi MAC stays out of boot.img (no --wifi-mac-file).
 name: Build boot.img (XNU + UEFI)
 
 on:
@@ -44,6 +46,7 @@ env:
   MU_SILICIUM_COMMIT: a8ca6f0d63709a55f66e8f68b0356da4a7cc75d5
   UEFI_OVERLAY_COMMIT: 42412d049040ceafe644eeca21bb8fa650ebf472   # codex/touch-from-8549bfa
   KDK_DEFAULT_URL: https://github.com/dortania/KdkSupportPkg/releases/download/25F71/Kernel_Debug_Kit_26.5_build_25F71.dmg
+  IPSW_URL: https://updates.cdn-apple.com/2026SummerFCS/a1dbd14a-9e9d-49b3-9af6-02286d68883f/iPhone17,2_26.6.2_23G90_Restore.ipsw
 
 jobs:
   build:
@@ -55,6 +58,14 @@ jobs:
       B2L_ENABLE_TOUCH: ${{ (github.event_name != 'workflow_dispatch' || inputs.enable_touch) && '1' || '0' }}
 
     steps:
+      - name: Artifact password present
+        env:
+          B2L_ARTIFACT_PASSWORD: ${{ secrets.B2L_ARTIFACT_PASSWORD }}
+        run: |
+          [[ ${#B2L_ARTIFACT_PASSWORD} -ge 12 ]] || {
+            echo "::error::Set the B2L_ARTIFACT_PASSWORD repository secret (12+ characters): the kernel embeds IPSW-derived data and artifacts are only uploaded encrypted."
+            exit 1; }
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -75,7 +86,7 @@ jobs:
       - name: Toolchain
         run: |
           brew update
-          brew install llvm lld nasm acpica rsync
+          brew install llvm lld nasm acpica rsync sevenzip
           mkdir -p out/llvm-bin
           ln -sf "$(brew --prefix llvm)/bin/"* out/llvm-bin/
           ln -sf "$(brew --prefix lld)/bin/lld-link" out/llvm-bin/lld-link
@@ -83,7 +94,7 @@ jobs:
           echo "CLANG_BIN=$GITHUB_WORKSPACE/out/llvm-bin" >> "$GITHUB_ENV"
           echo "$GITHUB_WORKSPACE/out/llvm-bin" >> "$GITHUB_PATH"
           python3 -m venv out/venv
-          out/venv/bin/python -m pip install --quiet --upgrade pip
+          out/venv/bin/python -m pip install --quiet --upgrade pip cryptography
           echo "PYTHON_COMMAND=$GITHUB_WORKSPACE/out/venv/bin/python" >> "$GITHUB_ENV"
           xcodebuild -version
           xcrun --sdk macosx --show-sdk-path
@@ -129,6 +140,27 @@ jobs:
           path: out/kdk
           key: b2l-kdk-25f71-v1
 
+      - name: Restore 23G90 launchd.plist cache
+        id: cache-launchd
+        uses: actions/cache/restore@v4
+        with:
+          path: out/ipsw/launchd.plist
+          key: b2l-launchd-plist-23g90-v1
+
+      - name: launchd.plist from the 23G90 OS image (first run only)
+        if: steps.cache-launchd.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p out/ipsw
+          df -h /
+          bash tools/b1l/ipsw-launchd.sh "$IPSW_URL" out/ipsw/launchd.plist
+
+      - name: Save launchd.plist cache
+        if: steps.cache-launchd.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: out/ipsw/launchd.plist
+          key: b2l-launchd-plist-23g90-v1
+
       - name: Mu-Silicium + beyond2lte overlay + board platform
         run: |
           git clone -q https://github.com/Project-Silicium/Mu-Silicium.git "$MU_WORK_TREE"
@@ -153,6 +185,8 @@ jobs:
           make -s -C "$MU_WORK_TREE/Mu_Basecore/BaseTools/Source/C" -j"$BUILD_JOBS"
 
       - name: XNU source (pinned, patched, overlay)
+        env:
+          B2L_LAUNCHD_PLIST: ${{ github.workspace }}/out/ipsw/launchd.plist
         run: |
           scripts/fetch-xnu.sh "$GITHUB_WORKSPACE/xnu"
           scripts/prepare-xnu.sh "$GITHUB_WORKSPACE/xnu"
@@ -189,6 +223,8 @@ jobs:
           scripts/test-loader.sh
           python3 tests/test_board_profiles.py
           python3 tests/test_prepare_boot_firmware.py
+          B2L_EXTERNAL_MEMORY_MAP="$MU_WORK_TREE/Platforms/Samsung/beyond2ltePkg/Library/MemoryMapLib/MemoryMapLib.c" \
+            PYTHONPATH=scripts python3 tests/test_memory_profile.py
 
       - name: XNU kernel (DEVELOPMENT ARM64 B2L)
         run: scripts/build-kernel.sh CWARNFLAGS=-w CXXWARNFLAGS=-w
@@ -198,7 +234,7 @@ jobs:
 
       - name: Package and verify boot.img
         run: |
-          kernel="out/xnu/obj/DEVELOPMENT_ARM64_B2L/mach.development.b2l"
+          kernel="$(find out/xnu/obj -name mach.development.b2l -type f | head -n 1)"
           fd="$MU_WORK_TREE/Build/${B2L_BOARD}Pkg/RELEASE_CLANGPDB/FV/SILICIUM_UEFI.fd"
           loader="$MU_WORK_TREE/Build/B2LXnu/RELEASE_CLANGPDB/AARCH64/XnuLoader.efi"
           test -f "$kernel" && test -f "$fd" && test -f "$loader"
@@ -209,16 +245,23 @@ jobs:
           cp "$kernel" "$fd" "$loader" out/ci-boot/
           cd out/ci-boot && shasum -a 256 boot.img mach.development.b2l SILICIUM_UEFI.fd XnuLoader.efi | tee SHA256SUMS
 
+      - name: Encrypt (7z AES-256, encrypted file names)
+        env:
+          B2L_ARTIFACT_PASSWORD: ${{ secrets.B2L_ARTIFACT_PASSWORD }}
+        run: |
+          cd out/ci-boot
+          7zz a -t7z -mhe=on -p"$B2L_ARTIFACT_PASSWORD" "../$B2L_BOARD-boot.7z" \
+            boot.img manifest.json SHA256SUMS mach.development.b2l SILICIUM_UEFI.fd XnuLoader.efi >/dev/null
+          7zz t -p"$B2L_ARTIFACT_PASSWORD" "../$B2L_BOARD-boot.7z" >/dev/null
+          ls -l "../$B2L_BOARD-boot.7z"
+
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.B2L_BOARD }}-boot-${{ github.run_number }}
           retention-days: 30
           if-no-files-found: error
+          compression-level: 0
           path: |
-            out/ci-boot/boot.img
-            out/ci-boot/manifest.json
+            out/${{ env.B2L_BOARD }}-boot.7z
             out/ci-boot/SHA256SUMS
-            out/ci-boot/mach.development.b2l
-            out/ci-boot/SILICIUM_UEFI.fd
-            out/ci-boot/XnuLoader.efi

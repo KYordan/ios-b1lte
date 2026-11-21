@@ -3,7 +3,7 @@
 """Build our bounded native iOS migration launcher and its kernel seed header."""
 from pathlib import Path
 from b2l_launch_cache import pad_binary_plist
-import argparse,hashlib,json,plistlib,subprocess,tempfile,importlib.util,struct
+import argparse,hashlib,json,os,plistlib,subprocess,tempfile,importlib.util,struct
 r=Path(__file__).resolve().parents[1]
 p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
 sdk=subprocess.check_output(['xcrun','--sdk','iphoneos','--show-sdk-path'],text=True).strip()
@@ -18,16 +18,22 @@ with tempfile.TemporaryDirectory(prefix='b2l-app-bootstrap-') as td:
   raise SystemExit('Bootstrap must carry the arm64e pointer-auth ABI subtype')
  if len(data)>512*1024:raise SystemExit('Bootstrap exceeds bounded payload size')
  job=plistlib.dumps({'Label':'dev.b2l.system-app-bootstrap-v4','ProgramArguments':['/usr/local/libexec/b2l-system-app-bootstrap-v4'],'RunAtLoad':True,'UserName':'root','ProcessType':'Background','LowPriorityIO':True,'StandardOutPath':'/private/var/log/b2l-system-app-bootstrap-v4.log','StandardErrorPath':'/private/var/log/b2l-system-app-bootstrap-v4.log'},fmt=plistlib.FMT_XML)
- # Read the exact source launch cache from the local prepared IPSW image.
+ # Read the exact source launch cache from the local prepared IPSW image, or (CI, no
+ # root image) from B2L_LAUNCHD_PLIST: /System/Library/xpc/launchd.plist taken unmodified
+ # from the same 23G90 OS image (tools/b1l/ipsw-launchd.sh).
  # Only the private generated header contains Apple cache data.
- spec=importlib.util.spec_from_file_location('hfsreader',r/'scripts/pull-b2l-unified-logs.py')
- m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
- reader=m.ImageReader(r/'out/ipsw/ios26-userdata.hfs.img');volume=m.Volume(reader)
  cache_path='/System/Library/xpc/launchd.plist';source=None
- for entry,full,_,_ in volume.selected((cache_path,)):
-  if full==cache_path:source=b''.join(m.Fork(volume,entry['fork_raw'],entry['id']).resolve(volume.overflow).content());break
- if source is None or not volume.unchanged():raise SystemExit('Missing/changed original launch cache')
- reader.close()
+ if os.environ.get('B2L_LAUNCHD_PLIST'):
+  source=Path(os.environ['B2L_LAUNCHD_PLIST']).read_bytes()
+  if source[:8]!=b'bplist00':raise SystemExit('B2L_LAUNCHD_PLIST is not the binary launchd.plist')
+ else:
+  spec=importlib.util.spec_from_file_location('hfsreader',r/'scripts/pull-b2l-unified-logs.py')
+  m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+  reader=m.ImageReader(r/'out/ipsw/ios26-userdata.hfs.img');volume=m.Volume(reader)
+  for entry,full,_,_ in volume.selected((cache_path,)):
+   if full==cache_path:source=b''.join(m.Fork(volume,entry['fork_raw'],entry['id']).resolve(volume.overflow).content());break
+  if source is None or not volume.unchanged():raise SystemExit('Missing/changed original launch cache')
+  reader.close()
  original=plistlib.loads(source);derived=plistlib.loads(source)
  job_path='/System/Library/LaunchDaemons/dev.b2l.system-app-bootstrap-v4.plist'
  if job_path in derived['LaunchDaemons']:raise SystemExit('Owned job already in source launch cache')

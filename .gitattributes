@@ -1,2 +1,5 @@
 # Unified diff context lines preserve upstream indentation and blank lines.
 patches/*.patch -whitespace
+
+# Shell, Python and C sources run on macOS, Linux and WSL: keep LF in every checkout.
+* text=auto eol=lf

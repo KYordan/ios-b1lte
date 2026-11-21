@@ -91,6 +91,27 @@ Not verified: no build ran (needs the Mac toolchain), no flash, no boot. The C h
 
 ## Building for the S10e
 
+### Without a Mac: GitHub Actions
+
+`.github/workflows/build-boot.yml` builds XNU, the `beyond0ltePkg` firmware with XnuLoader and
+`boot.img` on a GitHub macOS runner (free for this public repository). It is adapted from
+zekasio/beyond2lte-ios and pinned to the revisions of the S10 build: Mu-Silicium `a8ca6f0d`,
+beyond2lte-uefi `42412d0` (`codex/touch-from-8549bfa`). The KDK comes from dortania's mirror.
+
+1. Repository *Settings → Secrets and variables → Actions*: add `B2L_ARTIFACT_PASSWORD` (12+ characters).
+   The kernel embeds a launch cache derived from the 23G90 `launchd.plist`, so the artifact is a 7z
+   archive encrypted with it (artifacts of a public repository are readable by any GitHub user).
+2. *Actions → Build boot.img (XNU + UEFI) → Run workflow* (board `beyond0lte`), or push to `beyond0lte`.
+3. Download the artifact and open it with 7-Zip and the password: `boot.img`, `manifest.json`,
+   `SHA256SUMS`, the kernel, the FD and the loader.
+
+The first run also takes `launchd.plist` from the IPSW's OS image (`tools/b1l/ipsw-launchd.sh`: only
+that 7.75 GiB member is fetched with HTTP Range, the AEA key from Apple's public WKMS server) and
+caches it for later runs. The live DTB is published only after `tools/b1l/sanitize-dtb.py` zeroed
+`/chosen` (serial number, `ap_serial`, `em.did`, initrd range).
+
+### With a Mac
+
 ```bash
 export B2L_BOARD=beyond0lte
 # UEFI platform from the S10+ overlay, with the phone's live DTB (device-s10e/dump/live.dtb)

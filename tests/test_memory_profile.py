@@ -13,18 +13,29 @@ NEW='  {"B2L EL2 early memory", 0x9FD800000ULL, 0x02800000ULL, AddMem, MEM_RES, 
 class Tests(unittest.TestCase):
     def test_exact_reservations_replace_budget_guards(self):
         original='  {"Samsung U-H EL2", 0x87000000, 0x200000, AddMem, MEM_RES, SYS_MEM_CAP, Reserv, WRITE_BACK},\n  // DDR Regions\n'+OLD+'\n'
-        result=prep.xnu_memory_profile(original)
-        self.assertEqual(result,prep.xnu_memory_profile(result))
+        result=prep.xnu_memory_profile(original,'beyond2lte')
+        self.assertEqual(result,prep.xnu_memory_profile(result,'beyond2lte'))
         self.assertNotIn(OLD,result)
         self.assertIn('"B2L DT el2_earlymem", 0x9FD800000ULL, 0x2800000ULL',result)
         self.assertIn('"B2L DT sec_rdx_bootdev", 0x880000000ULL, 0xAD00000ULL',result)
         self.assertIn('"Samsung U-H EL2"',result)
         self.assertIn('"B2L absent DDR", 0xBAB00000ULL',result)
-        with self.assertRaises(ValueError):prep.xnu_memory_profile('unknown profile')
+        self.assertNotIn('"B2L absent DDR", 0x980000000ULL',result)
+        with self.assertRaises(ValueError):prep.xnu_memory_profile('unknown profile','beyond2lte')
+    def test_s10e_six_gib_profile(self):
+        original='  // DDR Regions\n'+OLD+'\n'
+        result=prep.xnu_memory_profile(original,'beyond0lte')
+        self.assertNotIn(OLD,result)
+        # The upper 2 GiB an 8 GiB map describes does not exist on the 6 GiB S10e.
+        self.assertIn('"B2L absent DDR", 0x980000000ULL, 0x80000000ULL',result)
+        self.assertIn('"B2L DT el2_earlymem", 0x97E000000ULL, 0x2000000ULL',result)
+        self.assertIn('"B2L DT camera", 0x99000000ULL, 0xE400000ULL',result)
+        # Primary arena 0x900000000..0x97E000000 less 32 MiB EFI headroom: 1984 MiB, above the 1 GiB minimum.
+        self.assertEqual((0x97E000000-0x900000000)//(1024*1024)-32,1984)
     def test_real_external_source_if_supplied(self):
         source=os.environ.get('B2L_EXTERNAL_MEMORY_MAP')
         if not source:self.skipTest('optional external source audit')
-        result=prep.xnu_memory_profile(Path(source).read_text())
+        result=prep.xnu_memory_profile(Path(source).read_text(),os.environ.get('B2L_BOARD','beyond2lte'))
         self.assertIn('B2L discontiguous RAM profile v1',result)
         self.assertNotRegex(result,r'^\s*\{"(?:Lower dynamic guard|Upper bank guard)"')
     def test_bootstrap_worst_case(self):
