@@ -51,7 +51,7 @@ Tested on the phone unless marked otherwise. Build numbers are GitHub Actions ru
 | **Battery** | 🚧 In progress | iOS shows 0 %: the bootloader leaves the MAX77705 bus unconfigured. Build 12 set the USI mode and timings, but bytes never left the controller; build 13 also sets the SCL/SDA pins, untested |
 | **Display sleep** | ❌ Not working | The power button dims and freezes the picture; backboardd's display-power request (IOMobileFramebuffer selector 79) is not implemented |
 | **Storage size** | ❌ Not working | *Capacity* reads "Zero KB" (no IOMedia for the UFS disk); *Available* is right |
-| **GPU (Metal)** | ❌ Not on the S10e yet | Works in part on the S10 ([docs/gpu/metal-progress.md](docs/gpu/metal-progress.md)); the S10e SYSTEM image does not carry the GL/Metal userland yet |
+| **GPU (Metal)** | ❌ Not on the S10e yet | The Mali-G76 comes up and runs test jobs; the S10e SYSTEM image does not carry the Metal userland yet. Plan: [docs/plans/s10e-metal.md](docs/plans/s10e-metal.md) (the S10 already draws its interface on the GPU: [metal-progress.md](docs/gpu/metal-progress.md)) |
 | **Audio, Bluetooth** | ⏸️ Parked | As on the S10 |
 | **Camera, cellular, fingerprint** | ❌ Not started | |
 
@@ -131,7 +131,7 @@ Set by the loader (`XnuLoader`) or useful when experimenting:
 | Boot menu | [docs/boot-menu.md](docs/boot-menu.md) |
 | How the port works | [docs/architecture.md](docs/architecture.md) |
 | Troubleshooting, kernel log | [docs/troubleshooting.md](docs/troubleshooting.md), [docs/persistent-console.md](docs/persistent-console.md) |
-| GPU and Metal | [docs/gpu/](docs/gpu) |
+| GPU and Metal | [docs/gpu/](docs/gpu); S10e plan: [docs/plans/s10e-metal.md](docs/plans/s10e-metal.md) |
 | Galaxy S10 facts | [docs/device-facts.md](docs/device-facts.md) |
 | Build-by-build history (French, S10) | [docs/journal/](docs/journal) |
 
