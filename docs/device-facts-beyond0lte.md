@@ -137,6 +137,18 @@ Differences from the macOS images, all checked with the firmware's own parser (`
 Wi-Fi files used for the S10e SYSTEM: `bcmdhd_sta.bin_b1`, `bcmdhd_clm.blob`, `nvram.txt_CS01_semco_b1`,
 `bcm4375B1_semco.hcd` (the S10's Semco choice; the S10e module is `[VERIFY]` from the B2L WIFI OTP log).
 
+### Flashing from WSL
+
+- TWRP: official `twrp-3.7.0_9-2-beyond0lte.img` (sha256 `0488c876…`), written to `recovery` (`sda15`)
+  from rooted Android with `dd` and read back; the 27 small partitions were backed up first
+  (`device-s10e/backup-20261121`, outside git: `efs` holds the IMEI).
+- This TWRP has no `/dev/block/by-name`, only `/dev/block/platform/13d60000.ufs/by-name`. After each TWRP
+  boot: `adb shell ln -s /dev/block/platform/13d60000.ufs/by-name /dev/block/by-name` (tmpfs, gone at reboot).
+- `export ADB=tools/b1l/linux/adb-wsl ADB_EXE=/mnt/c/platform-tools/adb.exe B2L_BOARD=beyond0lte`: the
+  wrapper strips the `\r` of Windows adb.exe (guards compare `get-state` and `getprop` output) and passes
+  Windows paths for push/pull; `exec-out` stays binary.
+- `tools/flash-kit/check-device.sh` passes on the S10e in TWRP (boot sda14, system sda25, userdata sda31).
+
 ### With a Mac
 
 ```bash

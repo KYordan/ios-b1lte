@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: BSD-2-Clause
+# adb for the flash tools on WSL, through the Windows adb.exe (no USB passthrough needed):
+#   export ADB=/path/to/tools/b1l/linux/adb-wsl  ADB_EXE=/mnt/c/platform-tools/adb.exe
+# - text output loses the '\r' adb.exe adds, so "$(adb get-state)" == recovery works;
+#   exec-out is passed through untouched (binary partition reads);
+# - local paths of push/pull are given to adb.exe as Windows paths (wslpath -w).
+set -o pipefail
+exe=${ADB_EXE:-/mnt/c/platform-tools/adb.exe}
+args=("$@"); cmd=""; i=0
+while (( i < ${#args[@]} )); do
+  case ${args[i]} in
+    -s|-t|-H|-P|-L) i=$((i + 2)) ;;
+    -*) i=$((i + 1)) ;;
+    *) cmd=${args[i]}; break ;;
+  esac
+done
+winpath() {   # existing file or a file in an existing directory
+  if [[ -e "$1" ]]; then wslpath -w "$1"
+  else printf '%s\\%s' "$(wslpath -w "$(dirname "$1")")" "$(basename "$1")"; fi
+}
+case $cmd in
+  push)  # adb push LOCAL... REMOTE
+    for (( j = i + 1; j < ${#args[@]} - 1; j++ )); do
+      [[ ${args[j]} == -* ]] || args[j]=$(winpath "${args[j]}")
+    done ;;
+  pull)  # adb pull REMOTE... LOCAL
+    last=$(( ${#args[@]} - 1 )); (( last > i + 1 )) && args[last]=$(winpath "${args[last]}") ;;
+esac
+if [[ $cmd == exec-out ]]; then exec "$exe" "${args[@]}"; fi
+"$exe" "${args[@]}" | tr -d '\r'
