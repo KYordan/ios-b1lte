@@ -10,6 +10,7 @@
 #include <IOKit/IOKitKeys.h>
 #include <libkern/c++/OSData.h>
 #include <pexpert/pexpert.h>
+#include "B2LBattery.h"
 
 class B2LPlatformExpert : public IODTPlatformExpert {
 	OSDeclareDefaultStructors(B2LPlatformExpert);
@@ -130,6 +131,19 @@ B2LPlatformExpert::start(IOService *provider)
 	b2l_pmu = (volatile uint8_t *)ml_io_map(B2L_PMU_PHYS, B2L_PMU_SIZE);
 	IOLog("B2L PM: power off/restart through the PMU %s\n", b2l_pmu != NULL ? "ready" : "unavailable");
 	registerService();
+	/* Battery (B2LBattery.h): started here rather than through a config-table entry; it publishes itself on its
+	 * first good fuel-gauge read. Kill switch: boot-arg b2l_battery=0. */
+	{
+		int battery = 1;
+		PE_parse_boot_argn("b2l_battery", &battery, sizeof(battery));
+		B2LBattery *bat = battery ? OSTypeAlloc(B2LBattery) : NULL;
+		if (bat != NULL && bat->init() && bat->attach(this)) {
+			if (!bat->start(this)) {
+				bat->detach(this);
+			}
+		}
+		OSSafeReleaseNULL(bat);
+	}
 	IOLog("B2L: platform expert registered; software product iPhone17,2, Samsung B2L hardware\n");
 	return true;
 }
