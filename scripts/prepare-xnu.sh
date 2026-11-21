@@ -67,11 +67,23 @@ python3 "$repo_root/scripts/apply-board-patches.py" "$xnu_path" \
   "$repo_root/patches/0057-b2l-scoped-coregraphics-backtrace.patch" \
   "$repo_root/patches/0058-b2l-owned-launch-cache.patch" \
   "$repo_root/patches/0059-b2l-typed-critical-exit.patch"
-# New files have separate provenance and are kept as an overlay.
+# New files have separate provenance and are kept as an overlay. A few overlay files are
+# complete replacements of upstream XNU files (sys_generic.c, kern_event.c, rtsock.c,
+# OSKext.cpp, corecrypto_sha1.c, IOUserClient.cpp; the last already carries patch 0004).
+# Such a file may be replaced while it is still pristine upstream or changed only by the
+# patch series above; any other local edit stops the overlay, as before.
+series_touches() {
+  grep -qxF "+++ b/$1" "$repo_root"/patches/*.patch 2>/dev/null
+}
 while IFS= read -r -d '' source_file; do
   relative="${source_file#"$repo_root/xnu-overlay/"}"
   destination="$xnu_path/$relative"
   if [[ -f "$destination" ]] && ! cmp -s "$source_file" "$destination"; then
+    if git -C "$xnu_path" ls-files --error-unmatch -- "$relative" >/dev/null 2>&1 &&
+       { git -C "$xnu_path" diff --quiet HEAD -- "$relative" || series_touches "$relative"; }; then
+      echo "Overlay replaces upstream file: $relative"
+      continue
+    fi
     echo "Refusing to replace a different local overlay file: $destination" >&2
     exit 1
   fi
