@@ -7,7 +7,7 @@
  * is emulated in RAM (SiliciumPkg PcdEmuVariableNvModeEnable=TRUE), so it is kept across a return to the menu, not
  * across a reboot.
  */
-#include <Uefi.h>
+#include <PiDxe.h>   /* Uefi.h plus EFI_DXE_SERVICES, which DxeServicesTableLib.h needs */
 #include <Library/BaseLib.h>
 #include <Library/ArmLib.h>
 #include <Library/IoLib.h>
