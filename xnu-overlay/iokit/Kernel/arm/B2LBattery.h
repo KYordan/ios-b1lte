@@ -29,6 +29,13 @@
 #define B2L_BAT_SYSREG_PA  0x15C22000ULL
 #define B2L_BAT_USI_MODE   0x30u      /* /usi@15C22030 */
 #define B2L_USI_V2_I2C     0x4u
+/* Pins (build 12: the bus took the USI mode and timings, but a written byte never left the FIFO). DT
+ * /pinctrl@15C30000/hsi2c45-bus: gpm12-0 (SCL), gpm13-0 (SDA), function 2, no pull. Samsung's exynos9820 CMGP bank
+ * table: gpm12 at 0x180, gpm13 at 0x1A0, alive bank type (CON 4 bits at +0, PUD 4 bits at +8). */
+#define B2L_BAT_PINCTRL_PA 0x15C30000ULL
+#define B2L_BAT_PIN_SCL    0x180u
+#define B2L_BAT_PIN_SDA    0x1A0u
+#define B2L_BAT_PIN_FUNC   0x2u
 #define B2L_BAT_IPCLK_HZ   200000000u
 #define B2L_BAT_BUS_HZ     100000u
 #define B2L_BAT_FG         0x36
@@ -189,6 +196,26 @@ class B2LBattery : public IOPMPowerSource {
 		}
 		OSSafeReleaseNULL(sm);
 		OSSafeReleaseNULL(sd);
+		/* SCL and SDA to the I2C function, pulls off, as pinctrl "hsi2c45-bus" does. Only pin 0 of each bank. */
+		uint32_t pins[4] = { 0, 0, 0, 0 };
+		IOMemoryDescriptor *pd = IOMemoryDescriptor::withPhysicalAddress(B2L_BAT_PINCTRL_PA, 4096, kIODirectionInOut);
+		IOMemoryMap *pm = pd ? pd->map(kIOMapInhibitCache) : NULL;
+		if (pm) {
+			const uint32_t banks[2] = { B2L_BAT_PIN_SCL, B2L_BAT_PIN_SDA };
+			for (unsigned i = 0; i < 2; i++) {
+				volatile uint32_t *con = (volatile uint32_t *)(pm->getVirtualAddress() + banks[i]);
+				volatile uint32_t *pud = (volatile uint32_t *)(pm->getVirtualAddress() + banks[i] + 0x8);
+				pins[2 * i] = *con;
+				pins[2 * i + 1] = *pud;
+				*con = (*con & ~0xfu) | B2L_BAT_PIN_FUNC;
+				*pud = *pud & ~0xfu;
+			}
+			__asm__ volatile ("dsb sy" ::: "memory");
+			IOLog("B2L BATTERY: pins scl con 0x%x pud 0x%x, sda con 0x%x pud 0x%x -> function %u, no pull\n",
+			    pins[0], pins[1], pins[2], pins[3], B2L_BAT_PIN_FUNC);
+		}
+		OSSafeReleaseNULL(pm);
+		OSSafeReleaseNULL(pd);
 		uint32_t con = r(0xC4), opt = r(0xC8);
 		w(0xC4, con & ~1u);                     /* USI_RESET is active high */
 		IODelay(1);

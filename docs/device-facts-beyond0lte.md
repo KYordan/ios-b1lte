@@ -184,7 +184,8 @@ Build numbers are GitHub Actions runs of `build-boot.yml`; only `boot.img` (`sda
 | 7 | iOS canvas 880 × 1912 @2x (the iPhone17,2 layout) instead of 750 × 1584 | iOS laid out completely, but only the top 1912 of 2280 panel rows were drawn: the old console stayed below |
 | 8 | The scaled copy maps the whole panel (it used `fSurface`'s mapping, sized for the logical rows, and wrote ~1.6 MB a frame past it); `haltRestart()` through the PMU; boot menu with *Power off*, 10 s countdown, S10e layout | **Full screen**, dock visible. Power off no longer panics ("Halt/Restart Timed Out") but restarts |
 | 11 | ACPM stop before `PS_HOLD` (Samsung `exynos_acpm_reboot`); battery driver | Power off still restarts; log: battery bus "has no timings" (left unconfigured by the bootloader) |
-| 12 | WTSR/SMPL disarmed through ACPM before power off (Samsung `s2m_rtc_shutdown`); battery bus set up (USI_CMGP03 I2C mode, USI reset released, fast-mode timings) | not tested yet |
+| 12 | WTSR/SMPL disarmed through ACPM before power off (Samsung `s2m_rtc_shutdown`); battery bus set up (USI_CMGP03 I2C mode, USI reset released, fast-mode timings) | **Power off from iOS switches the phone off.** The menu's *Power off* still restarts (no on-screen note: the APM SRAM is not mapped in UEFI, so both ACPM steps were skipped). Battery: USI mode was `0x0` and is now I2C, but the first byte stays in the TX FIFO (`trans=0xa0006 fifo=0x1000001`): the pins were never muxed |
+| 13 | UEFI maps the APM SRAM and mailbox (GCD MMIO, uncached) and shows both ACPM results for 3 s before `PS_HOLD`; battery pins `gpm12-0`/`gpm13-0` set to function 2, no pull (DT `hsi2c45-bus`) | not tested yet |
 
 Seen on boot 8–11, still open: the power button dims and freezes the picture instead of turning the display off
 (backboardd calls IOMobileFramebuffer selector 79 with 0x40, answered *unsupported*); *Settings → General → About*
@@ -197,5 +198,5 @@ app-switcher snapshots are black; the GL/Metal userland is not on the S10e SYSTE
 2. ~~The GOP stride on the S10e~~: 1080 × 2280, stride 4320 (boot 7 log: `AppleCLCD 1080x2280 stride 4320`).
 3. ~~sec_ts Y761 behaves like the S10's Y771~~: yes, touch works (first boot).
 4. Wi-Fi module (Semco vs Murata NVRAM) `[VERIFY]` from the `B2L WIFI` OTP log.
-5. Does `PS_HOLD` low switch the S10e off once WTSR/SMPL are disarmed (build 12)?
-6. Is the CMGP USI clock running when the bootloader leaves the battery bus unconfigured (build 12 logs `B2L BATTERY: bus setup …`)?
+5. ~~Does `PS_HOLD` low switch the S10e off once WTSR/SMPL are disarmed?~~ Yes, from iOS (build 12).
+6. ~~Is the CMGP USI clock running when the bootloader leaves the battery bus unconfigured?~~ Yes: the controller takes mode, timings and data (build 12); the pins were the missing part.

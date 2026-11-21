@@ -47,8 +47,8 @@ Tested on the phone unless marked otherwise. Build numbers are GitHub Actions ru
 | **Clock** | ✅ Works | Time from the PMIC RTC |
 | **Root filesystem** | ✅ Works | HFS+ root on UFS `userdata`, made on Linux |
 | **SpringBoard & apps** | 🚧 Partial | Lock screen, home screen, dock, Control Center, Settings, Photos, App Library; widgets stay at "Waiting…", app-switcher snapshots are black |
-| **Power off / restart** | 🚧 In progress | Restart works. Power off (iOS and menu) restarts the phone instead: build 12 disarms the PMIC's WTSR/SMPL and stops the APM before `PS_HOLD`, untested |
-| **Battery** | 🚧 In progress | iOS shows 0 %: the bootloader leaves the MAX77705 bus unconfigured. Build 12 sets the bus up, untested |
+| **Power off / restart** | 🚧 Partial | Restart works. **Power off from iOS works** since build 12 (PMIC WTSR/SMPL disarmed, APM stopped, then `PS_HOLD`). The boot menu's *Power off* still restarts: UEFI does not map the APM memory, build 13 maps it |
+| **Battery** | 🚧 In progress | iOS shows 0 %: the bootloader leaves the MAX77705 bus unconfigured. Build 12 set the USI mode and timings, but bytes never left the controller; build 13 also sets the SCL/SDA pins, untested |
 | **Display sleep** | ❌ Not working | The power button dims and freezes the picture; backboardd's display-power request (IOMobileFramebuffer selector 79) is not implemented |
 | **Storage size** | ❌ Not working | *Capacity* reads "Zero KB" (no IOMedia for the UFS disk); *Available* is right |
 | **GPU (Metal)** | ❌ Not on the S10e yet | Works in part on the S10 ([docs/gpu/metal-progress.md](docs/gpu/metal-progress.md)); the S10e SYSTEM image does not carry the GL/Metal userland yet |

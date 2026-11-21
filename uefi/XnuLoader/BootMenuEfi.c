@@ -168,12 +168,22 @@ Reset(BOOLEAN Recovery)
 #define B2L_ACPM_STOP_CH      4u
 #define B2L_PMIC_RTC_TYPE     0x02u
 
-STATIC BOOLEAN
+/* 0 when [Base, Base + Size) is mapped. The firmware does not describe the APM SRAM and mailbox (build 12: the menu's
+ * power off skipped both steps and the PMIC restarted the phone), so a range absent from the GCD is added as uncached
+ * MMIO; setting its attributes has the CPU driver map it. Negative codes say which step failed, for the menu. */
+STATIC INTN
 Mapped(UINT64 Base, UINT64 Size)
 {
     EFI_GCD_MEMORY_SPACE_DESCRIPTOR D;
-    if (gDS == NULL || EFI_ERROR(gDS->GetMemorySpaceDescriptor(Base, &D))) return FALSE;
-    return D.GcdMemoryType != EfiGcdMemoryTypeNonExistent && D.BaseAddress + D.Length >= Base + Size;
+    if (gDS == NULL || EFI_ERROR(gDS->GetMemorySpaceDescriptor(Base, &D))) return -11;
+    if (D.GcdMemoryType == EfiGcdMemoryTypeNonExistent) {
+        UINT64 B = Base & ~0xFFFULL, L = ((Base + Size + 0xFFFULL) & ~0xFFFULL) - B;
+        if (EFI_ERROR(gDS->AddMemorySpace(EfiGcdMemoryTypeMemoryMappedIo, B, L, EFI_MEMORY_UC))) return -12;
+        if (EFI_ERROR(gDS->SetMemorySpaceAttributes(B, L, EFI_MEMORY_UC))) return -13;
+        if (EFI_ERROR(gDS->GetMemorySpaceDescriptor(Base, &D))) return -11;
+    }
+    if (D.GcdMemoryType == EfiGcdMemoryTypeNonExistent || D.BaseAddress + D.Length < Base + Size) return -14;
+    return 0;
 }
 
 STATIC UINT32 Sram(UINT32 Off) { return MmioRead32(B2L_ACPM_SRAM + Off); }
@@ -185,7 +195,10 @@ STATIC INTN
 AcpmXfer(UINT32 Ch, UINT32 Cmd[4])
 {
     STATIC UINT32 Seq;
-    if (!Mapped(B2L_ACPM_SRAM, B2L_ACPM_SRAM_SIZE) || !Mapped(B2L_ACPM_MBOX, 0x1000)) return -1;
+    INTN M = Mapped(B2L_ACPM_SRAM, B2L_ACPM_SRAM_SIZE);
+    if (M) return M;                 /* -11..-14: SRAM */
+    M = Mapped(B2L_ACPM_MBOX, 0x1000);
+    if (M) return M - 10;            /* -21..-24: mailbox */
     UINT32 Chans = Sram(0x7000 + 8), ApMax = Sram(0x7000 + 24);
     if (ApMax <= Ch || ApMax > 32 || !InSram(Chans, 72u * ApMax)) return -2;
     UINT32 C = Chans + 72u * Ch, Ci = C + 16;
@@ -250,13 +263,19 @@ DisarmWtsrSmpl(VOID)
     return 0;
 }
 
-/* Returns only when the phone is still on. Wtsr / Stop: the two ACPM results, for the menu's note. */
+/* Steps 1 and 2; Wtsr / Stop: their results (0 = done), which the menu shows before step 3. */
 STATIC VOID
-PowerOff(INTN *Wtsr, INTN *Stop)
+PowerOffPrepare(INTN *Wtsr, INTN *Stop)
 {
     UINT32 Cmd[4] = { 1u << 22, 0, 0, 0 };
     *Wtsr = DisarmWtsrSmpl();
     *Stop = AcpmXfer(B2L_ACPM_STOP_CH, Cmd);
+}
+
+/* Step 3. Returns only when the phone is still on. */
+STATIC VOID
+PowerOffHold(VOID)
+{
     for (UINTN Try = 0; Try < 3; Try++) {   /* sec_power_off() retries once a second */
         MmioAnd32(B2L_PMU_BASE + B2L_PMU_PS_HOLD, ~B2L_PS_HOLD_DATA);
         gBS->Stall(1000 * 1000);
@@ -308,9 +327,15 @@ B2lBootMenu(CONST CHAR8 *Note, BOOLEAN NoCountdown)
         }
         if (Action == B2L_ACT_POWEROFF) {
             STATIC CHAR8 Still[96];
-            Draw(&Menu, Now, Note, "Switching off...");
+            STATIC CHAR8 Steps[64];
             INTN Wtsr, Stop;
-            PowerOff(&Wtsr, &Stop);
+            Draw(&Menu, Now, Note, "Switching off...");
+            PowerOffPrepare(&Wtsr, &Stop);
+            /* On screen for 3 s before PS_HOLD, so a photo tells which step failed if the phone restarts. */
+            AsciiSPrint(Steps, sizeof(Steps), "Power off: wtsr %d, acpm %d", (INT32)Wtsr, (INT32)Stop);
+            Draw(&Menu, NowMs(), Steps, "Switching off...");
+            gBS->Stall(3 * 1000 * 1000);
+            PowerOffHold();
             /* Still here (on a charger the PMIC keeps the supply): back to the menu, no countdown, with the
              * ACPM results so a photo says which step did not take. */
             AsciiSPrint(Still, sizeof(Still), "Still on (charger connected?). Unplug it and try again. [wtsr %d acpm %d]",
