@@ -10,7 +10,7 @@ image=$1 name=$2 expect=$3 psize=$4
 adb="${ADB:-$HOME/Developer/android/platform-tools/adb}${B2L_SERIAL:+ -s $B2L_SERIAL}"
 # adb shell reads stdin: every call below must not consume the caller's input.
 bs=$((4 * 1024 * 1024)); maxrun=64
-size=$(stat -f %z "$image")
+size=$(b2l_size "$image")
 (( size % bs == 0 )) || { echo "image size not a multiple of 4 MiB" >&2; exit 1; }
 n=$((size / bs))
 [[ "$($adb get-state)" == recovery ]] || { echo "not in TWRP" >&2; exit 1; }

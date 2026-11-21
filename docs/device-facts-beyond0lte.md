@@ -110,6 +110,33 @@ that 7.75 GiB member is fetched with HTTP Range, the AEA key from Apple's public
 caches it for later runs. The live DTB is published only after `tools/b1l/sanitize-dtb.py` zeroed
 `/chosen` (serial number, `ap_serial`, `em.did`, initrd range).
 
+### iOS images on Linux / WSL2 (no Mac)
+
+`tools/b1l/linux/` makes the USERDATA root and the SYSTEM image without `hdiutil`. Checked on
+WSL2 (Ubuntu 24.04, 2026-11-21) with the 23G90 IPSW:
+
+1. Decrypt the IPSW images: `tools/b1l/zip-member.py IPSW --manifest-key OS` (and `Cryptex1,SystemOS`),
+   `tools/b1l/aea-key.py` for the key (Apple's public WKMS), `ipsw fw aea FILE --key-val KEY`
+   (github.com/blacktop/ipsw, release checksum verified); AppOS is a plain DMG member.
+2. HFS+ for the WSL kernel: `tools/b1l/linux/build-wsl-hfsplus.sh`, then `insmod hfsplus.ko`.
+   APFS read: apfs-fuse (github.com/sgan81/apfs-fuse).
+3. `HFSPLUS_KO=... tools/b1l/linux/build-ios-root.sh` — copy, `prepare-ios-root.py`, PAC translation.
+   Result on 23G90: 41,502,070 cache words (the B1L-0250 figure), the two MediaServices NOPs as the
+   only other changes, ~1,100 standalone Mach-O files translated, 0 convertible words left.
+4. `B2L_BOARD=beyond0lte WIFI_DIR=... tools/b1l/linux/build-system-image.sh ROOT_IMAGE`.
+
+Differences from the macOS images, all checked with the firmware's own parser (`common/cache/CacheHfs.c`):
+- `mkfs.hfsplus -J` leaves the journal uninitialized (JIB `NeedInit`); `hfs-journal-init.py` writes the
+  empty journal header as `newfs_hfs`/XNU `journal_create` do, so `b2l_hfs_journal_empty` accepts both images.
+- The catalog sits mid-volume, so the grown cache has two inline extents; the loader and kernel use
+  `b2l_hfs_cache_view` (up to eight). Linux allocates whole 64 KiB data clumps, so the cache size is
+  rounded down to a clump multiple (5,788,073,984 bytes on the S10e) to keep allocation equal to size.
+- `grow-native-cache.py` preallocates only on macOS (`F_PREALLOCATE`); `copy-tree.py` skips the symlink
+  mode, which Linux cannot set.
+
+Wi-Fi files used for the S10e SYSTEM: `bcmdhd_sta.bin_b1`, `bcmdhd_clm.blob`, `nvram.txt_CS01_semco_b1`,
+`bcm4375B1_semco.hcd` (the S10's Semco choice; the S10e module is `[VERIFY]` from the B2L WIFI OTP log).
+
 ### With a Mac
 
 ```bash

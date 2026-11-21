@@ -7,8 +7,8 @@
 #   build-system-image.sh ROOT_IMAGE [WORK]     (default WORK=/root/s10e)
 #
 # WIFI_DIR=dir copies fw.bin, nvram.txt, clm.blob, bt.hcd into /b2l-wifi (B1L-0149/0212).
-# The firmware maps the cache from at most one data extent, so the result is checked with the
-# firmware's own parser (common/cache/CacheHfs.c via tests/native_cache_hfs_test.c).
+# The result is checked with the firmware's own parser (common/cache/CacheHfs.c via
+# tests/native_cache_layout_test.c).
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }
 root_image=$1; work=${2:-/root/s10e}
@@ -33,6 +33,15 @@ rm -f "$hfs" "$out/root-header.bin" "$out/cache-128m.backup" "$out/cache-grow.js
 echo "== 1/6 Journaled HFS+ of $hfs_bytes bytes ($B2L_BOARD)"
 truncate -s "$hfs_bytes" "$hfs"
 mkfs.hfsplus -J -v B2LSYSTEM "$hfs" >/dev/null
+# Linux hfsplus allocates whole data clumps and keeps them; the firmware requires the allocated
+# extents to equal the logical size exactly. Pick the largest cache size of the B2L form
+# (8192 + n * 24576) that is also a multiple of the volume's dataClumpSize.
+clump=$(python3 -c "import struct,sys; f=open(sys.argv[1],'rb'); f.seek(1024+60); print(struct.unpack('>I',f.read(4))[0])" "$hfs")
+n=$(( (cache_target - 8192) / 24576 ))
+for _ in $(seq 64); do (( (8192 + n * 24576) % clump == 0 )) && break; n=$((n - 1)); done
+(( (8192 + n * 24576) % clump == 0 )) || { echo "no cache size aligned to clump $clump" >&2; exit 1; }
+cache_bytes=$(( 8192 + n * 24576 ))
+echo "data clump $clump bytes; native cache $cache_bytes bytes ($n cells)"
 
 echo "== 2/6 root identity from the iOS root header"
 head -c 4096 "$root_image" > "$out/root-header.bin"
@@ -50,7 +59,8 @@ if [[ -n "${WIFI_DIR:-}" ]]; then
 fi
 sync; umount "$mnt"; trap - EXIT
 
-echo "== 4/6 fsck, header and firmware-parser checks"
+echo "== 4/6 journal init (as newfs_hfs does), fsck, header and firmware-parser checks"
+python3 -I "$repo/tools/b1l/linux/hfs-journal-init.py" "$hfs"
 fsck.hfsplus -f -n "$hfs"
 python3 -I - "$hfs" "$hfs_bytes" <<'EOF'
 import struct, sys
@@ -67,9 +77,13 @@ for name, h in (('primary', primary), ('alternate', alternate)):
 if primary[:4] != alternate[:4] or primary[40:48] != alternate[40:48]:
     sys.exit('primary and alternate headers disagree')
 EOF
-cc -std=c11 -O2 -I"$repo/common/cache" "$repo/tests/native_cache_hfs_test.c" "$repo/common/cache/CacheHfs.c" \
-  "$repo/common/cache/b2l_cache_core.c" "$repo/common/cache/CacheSha.c" -o "$work/bin/native_cache_hfs_test"
-"$work/bin/native_cache_hfs_test" "$hfs"
+# The loader (uefi/XnuLoader/CacheEfi.c) and the kernel (bsd/dev/b2l_ufs_disk.c) map the cache through
+# b2l_hfs_cache_view, which accepts up to eight inline extents: mkfs.hfsplus puts the catalog in the
+# middle of the volume, so the grown cache has two. Same check as the macOS grow (records preserved,
+# cross-extent writes, metadata rejected).
+cc -std=c11 -O2 -D_GNU_SOURCE -I"$repo/common/cache" "$repo/tests/native_cache_layout_test.c" "$repo/common/cache/CacheHfs.c" \
+  "$repo/common/cache/b2l_cache_core.c" "$repo/common/cache/CacheSha.c" -o "$work/bin/native_cache_layout_test"
+"$work/bin/native_cache_layout_test" "$hfs" "$out/cache-128m.backup"
 
 echo "== 5/6 16 MiB persistent log region"
 python3 -I "$repo/scripts/b2l-log-region.py" init "$out/log-region.bin"

@@ -27,3 +27,5 @@ case "$B2L_BOARD" in
 esac
 export B2L_BOARD B2L_MODEL B2L_BOOT_DEV B2L_BOOT_BYTES B2L_SYSTEM_DEV B2L_SYSTEM_BYTES \
 	B2L_USERDATA_DEV B2L_USERDATA_BYTES B2L_UEFI_PKG
+# File size on macOS (BSD stat) and Linux/WSL (GNU stat).
+b2l_size() { stat -c %s "$1" 2>/dev/null || stat -f %z "$1"; }

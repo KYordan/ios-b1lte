@@ -10,7 +10,7 @@ set -euo pipefail
 image=$1 name=$2 block=$3 partition_bytes=$4
 adb="${ADB:-$HOME/Developer/android/platform-tools/adb}${B2L_SERIAL:+ -s $B2L_SERIAL}"
 chunk=$((512 * 1024 * 1024)); bs=$((4 * 1024 * 1024)); per=$((chunk / bs))
-size=$(stat -f %z "$image")
+size=$(b2l_size "$image")
 (( size % bs == 0 )) || { echo "image is not 4 MiB aligned" >&2; exit 1; }
 (( size <= partition_bytes )) || { echo "image larger than partition" >&2; exit 1; }
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/b1l-flash.XXXXXX"); trap 'rm -rf "$tmp"' EXIT

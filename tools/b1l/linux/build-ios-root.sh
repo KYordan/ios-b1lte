@@ -112,8 +112,9 @@ macho_files | xargs -0 "$nc" macho-apply | awk '/^macho-apply|^MACHO|^  /' | sor
 echo "check: no convertible words left"
 macho_files | xargs -0 "$nc" macho 2>/dev/null | grep -E 'MACHO TOTAL' | sort | uniq -c
 
-echo "== 6/7 unmount and fsck"
+echo "== 6/7 unmount, initialize the journal (as newfs_hfs does), fsck"
 cleanup; trap - EXIT
+python3 -I "$repo/tools/b1l/linux/hfs-journal-init.py" "$image"
 fsck.hfsplus -f -n "$image"
 
 echo "== 7/7 hash"

@@ -2,7 +2,7 @@
 # flash-boot.sh IMAGE SHA256 -- guarded BOOT write + readback (all adb calls with </dev/null)
 # The phone (model, BOOT block and size) comes from board.sh: B2L_BOARD=beyond0lte for the S10e.
 set -e; . "$(dirname "${BASH_SOURCE[0]}")/board.sh"
-adb="${ADB:-$HOME/Developer/android/platform-tools/adb}${B2L_SERIAL:+ -s $B2L_SERIAL}"; img=$1; want=$2; size=$(stat -f %z $img)
+adb="${ADB:-$HOME/Developer/android/platform-tools/adb}${B2L_SERIAL:+ -s $B2L_SERIAL}"; img=$1; want=$2; size=$(b2l_size "$img")
 dev=$B2L_BOOT_DEV
 [ "$size" -le "$B2L_BOOT_BYTES" ] || { echo image-too-large; exit 1; }
 [ "$($adb get-state 2>/dev/null </dev/null)" = recovery ] || { echo not-in-twrp; exit 1; }
