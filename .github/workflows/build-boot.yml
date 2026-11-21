@@ -37,6 +37,9 @@ on:
       - 'common/**'
       - 'boards/**'
       - 'scripts/**'
+      - 'tests/**'
+      - 'tools/b1l/ipsw-launchd.sh'
+      - 'tools/b1l/zip-member.py'
       - '.github/workflows/build-boot.yml'
 
 env:

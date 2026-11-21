@@ -71,14 +71,19 @@ VOID PlatformBootManagerAfterConsole () {
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)
 
-    def prepare(self, root, board=None):
+    @staticmethod
+    def env(board=None):
+        """The fixture's board, never the caller's B2L_BOARD (CI exports beyond0lte)."""
         env = dict(os.environ)
         env.pop("B2L_BOARD", None)
         if board:
             env["B2L_BOARD"] = board
+        return env
+
+    def prepare(self, root, board=None):
         return subprocess.run([sys.executable, str(PREPARE), "--mu", str(root),
                                "--loader", str(root / "Loader.efi"), "--loader-guid", GUID],
-                              capture_output=True, text=True, env=env)
+                              capture_output=True, text=True, env=self.env(board))
 
     def test_memory_profile_reserves_absent_s10e_ddr(self):
         for board, absent_top in (("beyond2lte", False), ("beyond0lte", True)):
@@ -110,7 +115,7 @@ VOID PlatformBootManagerAfterConsole () {
                        "--loader", str(root / "Loader.efi"), "--loader-guid", GUID,
                        "--enable-touch"]
             for unused in range(2):
-                result = subprocess.run(command, capture_output=True, text=True)
+                result = subprocess.run(command, capture_output=True, text=True, env=self.env())
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(soc.read_text().splitlines(),
                     ["  HsI2cLib|S5E9820Pkg/Library/HsI2cLib/HsI2cLib.inf"])
