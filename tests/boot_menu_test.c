@@ -20,7 +20,7 @@ main(void)
     /* Any key stops the countdown; navigation wraps both ways; select returns the item's action. */
     b2l_menu_init(&m, B2L_MENU_COUNT, 5000, B2L_START_NORMAL, 0);
     assert(m.selected == B2L_MENU_BOOT);
-    assert(b2l_menu_event(&m, B2L_KEY_UP, 100) == B2L_ACT_REDRAW && m.selected == B2L_MENU_REBOOT && !m.counting);
+    assert(b2l_menu_event(&m, B2L_KEY_UP, 100) == B2L_ACT_REDRAW && m.selected == B2L_MENU_POWEROFF && !m.counting);
     assert(b2l_menu_event(&m, B2L_KEY_NONE, 60000) == B2L_ACT_NONE);      /* no boot after a key */
     assert(b2l_menu_event(&m, B2L_KEY_DOWN, 200) == B2L_ACT_REDRAW && m.selected == B2L_MENU_BOOT);
     assert(b2l_menu_event(&m, B2L_KEY_DOWN, 400) == B2L_ACT_REDRAW && m.selected == B2L_MENU_HOLD);
@@ -29,8 +29,10 @@ main(void)
     assert(b2l_menu_event(&m, B2L_KEY_SELECT, 800) == B2L_ACT_RECOVERY);
     assert(b2l_menu_event(&m, B2L_KEY_DOWN, 1000) == B2L_ACT_REDRAW && m.selected == B2L_MENU_REBOOT);
     assert(b2l_menu_event(&m, B2L_KEY_SELECT, 1100) == B2L_ACT_REBOOT);
-    assert(b2l_menu_event(&m, B2L_KEY_DOWN, 1300) == B2L_ACT_REDRAW && m.selected == B2L_MENU_BOOT);
-    assert(b2l_menu_event(&m, B2L_KEY_SELECT, 1400) == B2L_ACT_BOOT);
+    assert(b2l_menu_event(&m, B2L_KEY_DOWN, 1300) == B2L_ACT_REDRAW && m.selected == B2L_MENU_POWEROFF);
+    assert(b2l_menu_event(&m, B2L_KEY_SELECT, 1400) == B2L_ACT_POWEROFF);
+    assert(b2l_menu_event(&m, B2L_KEY_DOWN, 1600) == B2L_ACT_REDRAW && m.selected == B2L_MENU_BOOT);
+    assert(b2l_menu_event(&m, B2L_KEY_SELECT, 1700) == B2L_ACT_BOOT);
 
     /* Debounce: the same key within 150 ms is dropped, another key is not, the same key later is taken. */
     b2l_menu_init(&m, B2L_MENU_BOOT, 0, B2L_START_NORMAL, 0);
@@ -38,9 +40,9 @@ main(void)
     assert(b2l_menu_event(&m, B2L_KEY_DOWN, 1000) == B2L_ACT_REDRAW && m.selected == 1);
     assert(b2l_menu_event(&m, B2L_KEY_DOWN, 1149) == B2L_ACT_NONE && m.selected == 1);
     assert(b2l_menu_event(&m, B2L_KEY_UP, 1150) == B2L_ACT_REDRAW && m.selected == 0);
-    assert(b2l_menu_event(&m, B2L_KEY_UP, 1301) == B2L_ACT_REDRAW && m.selected == 3);
+    assert(b2l_menu_event(&m, B2L_KEY_UP, 1301) == B2L_ACT_REDRAW && m.selected == 4);
     /* A clock that goes backwards is not a bounce: the key is taken rather than blocked until the clock catches up. */
-    assert(b2l_menu_event(&m, B2L_KEY_UP, 10) == B2L_ACT_REDRAW && m.selected == 2);
+    assert(b2l_menu_event(&m, B2L_KEY_UP, 10) == B2L_ACT_REDRAW && m.selected == 3);
 
     /* BACK only stops the countdown. */
     b2l_menu_init(&m, B2L_MENU_HOLD, 5000, B2L_START_NORMAL, 0);

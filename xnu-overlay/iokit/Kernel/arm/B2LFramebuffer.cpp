@@ -82,7 +82,8 @@ public:
 	 * canvas that swap() scales to the panel; otherwise it is the panel. */
 	uint32_t      fLogicalW, fLogicalH;
 	bool          fScaled;
-	uintptr_t     fPixels;          /* kernel mapping of the panel memory */
+	uintptr_t     fPixels;          /* kernel mapping of the whole panel memory (fMap) */
+	uint64_t      fPixelBytes;      /* length of that mapping: every copy is bounded by it */
 	IOMemoryMap  *fMap;
 	B2LSurface *fSurface;         /* the panel memory as an IOSurface */
 	B2LSurface *fClientSurface;   /* B1L-0097: the default surface handed out: ordinary memory, never the panel's */
@@ -166,7 +167,20 @@ AppleCLCD::start(IOService *provider)
 	/* The default surface must have the presented size: a mismatch leaves
 	 * every swap layer empty. Scaled, it is the panel's top-left part. */
 	fSurface = b2l_surface_create_physical(fPhys, fLogicalW, fLogicalH, fRowBytes, B2L_FB_FORMAT_BGRA);
-	fPixels = fSurface != NULL ? fSurface->kernelAddress() : 0;
+	/* The copies need the whole panel. fSurface->kernelAddress() maps only its logical rows: scaled (S10e, 880x1912
+	 * on 1080x2280) that was 1912 of the 2280 panel rows, so the bottom 368 stayed console and ~1.6 MB a frame went
+	 * past the end of the mapping into whatever kernel memory followed it. */
+	{
+		IOMemoryDescriptor *panel = IOMemoryDescriptor::withPhysicalAddress(fPhys,
+		    round_page((uint64_t)fRowBytes * fHeight), kIODirectionInOut);
+		fMap = panel != NULL ? panel->map(kIOMapWriteCombineCache) : NULL;
+		OSSafeReleaseNULL(panel);   /* the map keeps its descriptor */
+		fPixels = fMap != NULL ? (uintptr_t)fMap->getVirtualAddress() : 0;
+		fPixelBytes = fMap != NULL ? fMap->getLength() : 0;
+		if (fPixelBytes < (uint64_t)fRowBytes * fHeight) {
+			fPixels = 0;
+		}
+	}
 	if (fSurface != NULL && !fScaled) {   /* B1L-0096 */
 		b2l_zc_init(fPhys);
 		b2l_surface_set_scanout_shape(fWidth, fHeight, fRowBytes, b2l_zc_active());
@@ -183,6 +197,7 @@ AppleCLCD::start(IOService *provider)
 	if (fLock == NULL || fClients == NULL || fPixels == 0 || fWorkLoop == NULL) {
 		IOLog("B2L FB: setup failed\n");
 		OSSafeReleaseNULL(fSurface);    /* stays published: also held by the table */
+		OSSafeReleaseNULL(fMap);
 		OSSafeReleaseNULL(fWorkLoop);
 		return false;
 	}
@@ -325,10 +340,10 @@ AppleCLCD::swap(const uint8_t *rec)
             IOLockLock(fLock);
             uint64_t b2l_t0 = mach_absolute_time();   /* B1L-0095: what the copy to the panel costs */
             int shown=fScaled?
-                b2l_blit_scaled((void*)fPixels,(uint64_t)fRowBytes*fHeight,fWidth,fHeight,fRowBytes,
+                b2l_blit_scaled((void*)fPixels,fPixelBytes,fWidth,fHeight,fRowBytes,
                 (const void*)src,s->memory->getLength(),s->width,s->height,s->bytesPerRow,s->offset,
                 fLogicalW,fLogicalH,sx,sy,dx,dy,w,h):
-                b2l_blit((void*)fPixels,(uint64_t)fRowBytes*fHeight,fWidth,fHeight,fRowBytes,
+                b2l_blit((void*)fPixels,fPixelBytes,fWidth,fHeight,fRowBytes,
                 (const void*)src,s->memory->getLength(),s->width,s->height,s->bytesPerRow,s->offset,
                 sx,sy,dx,dy,w,h);
             if(shown&&!fConsolePaused){b2l_early_gui_present();fConsolePaused=true;IOLog("B2L FB: first IOSurface frame copied to physical scanout\n");}

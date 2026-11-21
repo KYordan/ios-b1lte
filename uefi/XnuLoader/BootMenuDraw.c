@@ -24,9 +24,12 @@ struct font { const unsigned char *bits; unsigned w, h; };
 static const struct font big = { &spleen_32_64[0][0], SPLEEN_32_64_W, SPLEEN_32_64_H };
 static const struct font small = { &spleen_16_32[0][0], SPLEEN_16_32_W, SPLEEN_16_32_H };
 
-static const char *const labels[B2L_MENU_COUNT] = { "Boot iOS", "Stay here", "Reboot to recovery", "Reboot" };
+static const char *const labels[B2L_MENU_COUNT] = {
+    "Boot iOS", "Stay here", "Reboot to recovery", "Reboot", "Power off",
+};
 static const char *const details[B2L_MENU_COUNT] = {
-    "Start iOS 26 now", "Don't boot, wait in this menu", "Restart into TWRP (untested)", "Restart the phone",
+    "Start iOS 26 now", "Don't boot, wait in this menu", "Restart into TWRP", "Restart the phone",
+    "Switch the phone off",
 };
 
 static void put(const struct canvas *c, int x, int y, uint32_t color)
@@ -114,53 +117,58 @@ static void note_lines(const struct canvas *c, int x, int y, unsigned cols, cons
 void b2l_menu_render(uint32_t *pixels, uint32_t stride, uint32_t width, uint32_t height, const struct b2l_menu_view *v)
 {
     const struct canvas c = { pixels, stride, width, height };
-    /* Compact rows below 2600 px (S10e, 2280 px): the cards, countdown and a four-line note then end above the key
-     * hints (cards from 24 %, 176 px cards, note right under the countdown instead of at 70 %). */
+    /* Five cards. Below 2600 px the S10e layout (1080 x 2280), in fixed pixels from the top:
+     *   title 150-278, subtitle 302-366, cards 430-1338 (5 x 164 + 4 x 22), countdown 1386-1450, bar 1482-1498,
+     *   note 1546 (four lines end at 1850), key hints 1916-2156; widest line "stop the timer" ends at 928 of 1080,
+     *   clear of the rounded corners and of the camera hole (top right, above 130 px).
+     * The S10 (1440 x 3040) keeps its proportions. The note always goes right under the countdown bar. */
     const int H = (int)height, compact = H < 2600;
-    const int margin = 96, cw = (int)width - 2 * margin, ch = compact ? 176 : 208, gap = compact ? 24 : 36;
-    int note_y = H * 70 / 100;
+    const int margin = compact ? 72 : 96, pad = compact ? 56 : 64, cw = (int)width - 2 * margin;
+    const int ch = compact ? 164 : 208, gap = compact ? 22 : 36, top = compact ? 28 : 36;
+    const int after_cards = compact ? 48 : 60, bar_gap = compact ? 32 : 40, key_col = compact ? 11 : 14;
+    int note_y;
     char line[64];
 
     for (uint32_t y = 0; y < height; y++)
         for (uint32_t x = 0; x < width; x++) pixels[y * stride + x] = BG;
 
-    int y = H * 13 / 100;
+    int y = compact ? 150 : H * 13 / 100;
     centered(&c, &big, 2, y, "iOS 26", TEXT);
     y += (int)big.h * 2 + 24;
-    centered(&c, &big, 1, y, "Galaxy S10 - XNU loader", DIM);
+    centered(&c, &big, 1, y, compact ? "Galaxy S10e - XNU loader" : "Galaxy S10 - XNU loader", DIM);
 
-    y = H * (compact ? 24 : 29) / 100;
+    y = compact ? 430 : H * 27 / 100;
     for (unsigned i = 0; i < B2L_MENU_COUNT; i++, y += ch + gap) {
-        int sel = i == v->selected, top = compact ? 24 : 36;
+        int sel = i == v->selected;
         round_rect(&c, margin, y, cw, ch, 40, sel ? ACCENT : CARD, BG);
-        text(&c, &big, 1, margin + 64, y + top, labels[i], TEXT);
-        text(&c, &small, 1, margin + 64, y + top + (int)big.h + 16, details[i], sel ? DIM_SEL : DIM);
-        if (sel) text(&c, &big, 1, margin + cw - 64 - (int)big.w, y + (ch - (int)big.h) / 2, ">", TEXT);
+        text(&c, &big, 1, margin + pad, y + top, labels[i], TEXT);
+        text(&c, &small, 1, margin + pad, y + top + (int)big.h + 12, details[i], sel ? DIM_SEL : DIM);
+        if (sel) text(&c, &big, 1, margin + cw - pad - (int)big.w, y + (ch - (int)big.h) / 2, ">", TEXT);
     }
 
-    y += 60;
+    y += after_cards - gap;
     if (v->status) {
         centered(&c, &big, 1, y, v->status, TEXT);
     } else if (v->seconds_left) {
         number(line, "Booting iOS in ", v->seconds_left, v->seconds_left == 1 ? " second" : " seconds");
         centered(&c, &big, 1, y, line, TEXT);
-        int bar_y = y + (int)big.h + 40, full = cw - 2 * 64;
+        int bar_y = y + (int)big.h + bar_gap, full = cw - 2 * pad;
         unsigned t = v->timeout_s ? v->timeout_s : 1;
-        round_rect(&c, margin + 64, bar_y, full, 16, 8, TRACK, BG);
+        round_rect(&c, margin + pad, bar_y, full, 16, 8, TRACK, BG);
         int fill = (int)((uint64_t)full * (v->seconds_left > t ? t : v->seconds_left) / t);
-        if (fill >= 16) round_rect(&c, margin + 64, bar_y, fill, 16, 8, ACCENT, TRACK);
+        if (fill >= 16) round_rect(&c, margin + pad, bar_y, fill, 16, 8, ACCENT, TRACK);
     } else {
         centered(&c, &big, 1, y, "Automatic boot is off", DIM);
     }
-    if (compact) note_y = y + (int)big.h + 40 + 16 + 40;   /* under the countdown bar */
+    note_y = y + (int)big.h + bar_gap + 16 + 48;   /* under the countdown bar */
 
-    if (v->note) note_lines(&c, margin, note_y, (unsigned)cw / big.w, v->note);
+    if (v->note) note_lines(&c, margin + pad, note_y, (unsigned)(cw - 2 * pad) / big.w, v->note);
 
     static const char *const keys[3][2] = { { "Volume +/-", "move" }, { "Power", "select" }, { "Bixby", "stop the timer" } };
-    int kx = margin + 64;
-    y = H - 120 - 3 * ((int)big.h + 24);
+    int kx = margin + pad;
+    y = H - (compact ? 100 : 120) - 3 * ((int)big.h + 24);
     for (unsigned i = 0; i < 3; i++, y += (int)big.h + 24) {
         text(&c, &big, 1, kx, y, keys[i][0], TEXT);
-        text(&c, &big, 1, kx + 14 * (int)big.w, y, keys[i][1], DIM);
+        text(&c, &big, 1, kx + key_col * (int)big.w, y, keys[i][1], DIM);
     }
 }

@@ -48,6 +48,7 @@ int main(int argc, char **argv)
             }
         fclose(f);
     }
+    free(px);
     puts("boot_menu_draw_test: ok");
     return 0;
 }

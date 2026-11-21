@@ -13,7 +13,8 @@ def main():
  if subprocess.check_output(adb+['get-state'],text=True).strip()!='recovery':p.error('device must be in recovery')
  board=b2l_board.board()
  if not b2l_board.identity_ok(lambda name:shell('getprop '+name),board) or shell('id -u')!='0':p.error(f'expected rooted {board} recovery')
- dev=shell('readlink -f /dev/block/by-name/system')
+ # The S10e TWRP has only /dev/block/platform/<ufs>/by-name, no /dev/block/by-name.
+ dev=shell('for p in /dev/block/by-name/system /dev/block/platform/*/by-name/system; do [ -e "$p" ] && readlink -f "$p" && break; done')
  if not re.fullmatch(r'/dev/block/sd[a-z][0-9]+',dev):p.error('unexpected SYSTEM block path')
  size=int(shell('blockdev --getsize64 '+shlex.quote(dev)))
  if size<=REGION+1024*1024 or size%4096:p.error('invalid SYSTEM geometry')

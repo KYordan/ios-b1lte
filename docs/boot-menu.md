@@ -20,10 +20,13 @@ reproduce the license notice.
 
 Entries:
 
-1. **Boot iOS** (start iOS), selected automatically after 5 s with no key press. Build option: `-D B2L_MENU_TIMEOUT_S=n`; 0 means no automatic start.
+1. **Boot iOS** (start iOS), selected automatically after 10 s with no key press. Build option: `-D B2L_MENU_TIMEOUT_S=n`; 0 means no automatic start.
 2. **Stay here** (do not start): the phone waits, without a watchdog. A key press returns to the menu.
-3. **Reboot to recovery**: writes `INFORM3 = 0x12345674` and `SYSIP_DAT0 = 0xFF` into the PMU (`0x15860000`), then requests a reset. These are the values of the Samsung exynos9820 kernel (`drivers/samsung/sec_reboot.c`, `drivers/soc/samsung/exynos-reboot.c`). **Not yet tested on the phone.**
+3. **Reboot to recovery**: writes `INFORM3 = 0x12345674` and `SYSIP_DAT0 = 0xFF` into the PMU (`0x15860000`), then requests a reset. These are the values of the Samsung exynos9820 kernel (`drivers/samsung/sec_reboot.c`, `drivers/soc/samsung/exynos-reboot.c`). Confirmed on the S10e: it lands in TWRP.
 4. **Reboot**: like the Samsung kernel (`exynos-reboot.c`), `RST_STAT = 0` then `SWRESET (0x3A00) = 1 << 1` in the PMU; `ResetSystem(EfiResetCold)` as a fallback. The Silicium firmware reset writes `1` (the 9810 value) and does nothing on the S10 (seen in B1L-0216).
+5. **Power off**: like `exynos_power_off()`, clears bit 8 (PS_HOLD data) of `PS_HOLD_CONTROL (0x030C)` in the PMU; `ResetSystem(EfiResetShutdown)` as a fallback. With a charger connected the PMIC may keep the phone on: the menu comes back without a countdown and says so.
+
+The kernel uses the same PMU registers for iOS's own restart and power off (`B2LPlatformExpert::haltRestart`).
 
 ## Guarantees
 

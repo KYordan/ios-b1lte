@@ -20,14 +20,14 @@
 #include "BootMenuDraw.h"
 
 #ifndef B2L_MENU_TIMEOUT_S
-#define B2L_MENU_TIMEOUT_S 5        /* build option: -D B2L_MENU_TIMEOUT_S=n, 0 = no automatic boot */
+#define B2L_MENU_TIMEOUT_S 10       /* build option: -D B2L_MENU_TIMEOUT_S=n, 0 = no automatic boot */
 #endif
 #define B2L_MENU_PROBE_MS 700u      /* a volume key held at start repeats after 500 ms (KeypadDeviceLib) */
 
 /* Exynos 9820 PMU (firmware MemoryMapLib "PMU" 0x15860000, mapped as device memory). Samsung's kernel asks the
  * bootloader for recovery by writing INFORM3 = 0x12345674 (drivers/samsung/sec_reboot.c, SEC_RESET_REASON_RECOVERY)
  * and SYSIP_DAT0 = 0xFF (drivers/soc/samsung/exynos-reboot.c, REBOOT_MODE_RECOVERY) before the software reset.
- * NOT YET TESTED ON THE PHONE: which of the two the S10 bootloader reads has not been checked. */
+ * Confirmed on the S10e (beyond0lte): "Reboot to recovery" lands in TWRP. */
 #define B2L_PMU_BASE          0x15860000ULL
 #define B2L_PMU_INFORM3       0x080C
 #define B2L_PMU_SYSIP_DAT0    0x0810
@@ -38,10 +38,14 @@
 #define B2L_SWRESET_TRIGGER   (1u << 1)
 #define B2L_RESET_RECOVERY    0x12345674u
 #define B2L_REBOOT_RECOVERY   0xFFu
+/* exynos-reboot.c exynos_power_off(): PS_HOLD_CONTROL bit 8 (PS_HOLD data) low, the PMIC then cuts the supply.
+ * With a charger connected Samsung's PMIC may start the phone again (charging mode). */
+#define B2L_PMU_PS_HOLD       0x030C
+#define B2L_PS_HOLD_DATA      (1u << 8)
 
 STATIC EFI_GUID mB2lMenuGuid = { 0x78da37fb, 0x7929, 0x467d, { 0xbc, 0xd8, 0xd3, 0x44, 0x2c, 0x84, 0x3d, 0x39 } };
 STATIC CONST CHAR16 *mItems[B2L_MENU_COUNT] = {
-    L"Boot iOS", L"Stay here (don't boot)", L"Reboot to recovery (untested)", L"Reboot",
+    L"Boot iOS", L"Stay here (don't boot)", L"Reboot to recovery", L"Reboot", L"Power off",
 };
 STATIC EFI_GRAPHICS_OUTPUT_PROTOCOL *mGop;
 STATIC UINT32 *mPixels;     /* back buffer, one GOP mode in size, kept for the loader's lifetime */
@@ -144,6 +148,14 @@ Reset(BOOLEAN Recovery)
     Print(L"\r\nReboot failed. Hold Power to switch the phone off.\r\n");
 }
 
+STATIC VOID
+PowerOff(VOID)
+{
+    MmioAnd32(B2L_PMU_BASE + B2L_PMU_PS_HOLD, ~B2L_PS_HOLD_DATA);
+    gBS->Stall(1000 * 1000);
+    gRT->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL);   /* fallback: the firmware's own power off */
+}
+
 /* Volume up held at start: menu with recovery preselected. Volume down held: menu without countdown. */
 STATIC enum b2l_menu_start
 ProbeStart(EFI_EVENT Timer)
@@ -185,6 +197,14 @@ B2lBootMenu(CONST CHAR8 *Note, BOOLEAN NoCountdown)
             while (WaitKey(Timer, 1000) == B2L_KEY_NONE) {}
             b2l_menu_init(&Menu, Menu.selected, 0, B2L_START_FORCE_MENU, NowMs());
             Draw(&Menu, NowMs(), Note, NULL);
+            continue;
+        }
+        if (Action == B2L_ACT_POWEROFF) {
+            Draw(&Menu, Now, Note, "Switching off...");
+            PowerOff();
+            /* Still here (on a charger the PMIC keeps or restarts the supply): back to the menu, no countdown. */
+            b2l_menu_init(&Menu, Menu.selected, 0, B2L_START_FORCE_MENU, NowMs());
+            Draw(&Menu, NowMs(), "Still on (charger connected?). Unplug it and try again.", NULL);
             continue;
         }
         Draw(&Menu, Now, Note, Action == B2L_ACT_RECOVERY ? "Rebooting to recovery..." : "Rebooting...");

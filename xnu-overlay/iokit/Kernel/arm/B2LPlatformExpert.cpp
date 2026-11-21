@@ -18,8 +18,62 @@ public:
 	const char *deleteList(void) APPLE_KEXT_OVERRIDE;
 	const char *excludeList(void) APPLE_KEXT_OVERRIDE;
 	long getGMTTimeOfDay(void) APPLE_KEXT_OVERRIDE;
+	int haltRestart(unsigned int type) APPLE_KEXT_OVERRIDE;
 };
 OSDefineMetaClassAndStructors(B2LPlatformExpert, IODTPlatformExpert);
+
+/* Power off and restart. Without them IOPlatformExpert::haltRestart had no PE_halt_restart to call, halt_all_cpus()
+ * spun, and 30 s later the shutdown watchdog panicked "Halt/Restart Timed Out @IOPlatformExpert.cpp:884" (S10e, first
+ * power-off from iOS). Exynos 9820 PMU, the same registers the loader menu resets with (uefi/XnuLoader/BootMenuEfi.c,
+ * confirmed on the S10e) and that Samsung's drivers/soc/samsung/exynos-reboot.c uses:
+ *   restart:   RST_STAT = 0, SWRESET = 1 << 1
+ *   power off: PS_HOLD_CONTROL bit 8 (PS_HOLD data) low, the PMIC then cuts the supply.
+ * Panic types are left to IOPlatformExpert so a panic stays on screen. */
+extern "C" vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
+#define B2L_PMU_PHYS             0x15860000ULL
+#define B2L_PMU_SIZE             0x4000
+#define B2L_PMU_PS_HOLD_CONTROL  0x030C
+#define B2L_PMU_PS_HOLD_DATA     (1u << 8)
+#define B2L_PMU_RST_STAT         0x0404
+#define B2L_PMU_SWRESET          0x3A00
+#define B2L_PMU_SWRESET_TRIGGER  (1u << 1)
+static volatile uint8_t *b2l_pmu;
+
+static void
+b2l_pmu_write(uint32_t off, uint32_t value)
+{
+	*(volatile uint32_t *)(b2l_pmu + off) = value;
+	__asm__ volatile ("dsb sy" ::: "memory");
+}
+
+static void
+b2l_pmu_reset(void)
+{
+	b2l_pmu_write(B2L_PMU_RST_STAT, 0);
+	b2l_pmu_write(B2L_PMU_SWRESET, B2L_PMU_SWRESET_TRIGGER);
+}
+
+int
+B2LPlatformExpert::haltRestart(unsigned int type)
+{
+	if (b2l_pmu == NULL || (type != kPEHaltCPU && type != kPERestartCPU)) {
+		return IODTPlatformExpert::haltRestart(type);
+	}
+	if (type == kPERestartCPU) {
+		kprintf("B2L PM: restart (PMU SWRESET)\n");
+		b2l_pmu_reset();
+	} else {
+		kprintf("B2L PM: power off (PMU PS_HOLD low)\n");
+		uint32_t hold = *(volatile uint32_t *)(b2l_pmu + B2L_PMU_PS_HOLD_CONTROL);
+		b2l_pmu_write(B2L_PMU_PS_HOLD_CONTROL, hold & ~B2L_PMU_PS_HOLD_DATA);
+		/* Still running (the PMIC keeps the phone up, e.g. on a charger): a restart beats the timeout panic. */
+		IODelay(1000 * 1000);
+		kprintf("B2L PM: still powered after PS_HOLD low, restarting\n");
+		b2l_pmu_reset();
+	}
+	IODelay(1000 * 1000);
+	return -1;
+}
 
 bool
 B2LPlatformExpert::start(IOService *provider)
@@ -65,6 +119,8 @@ B2LPlatformExpert::start(IOService *provider)
         IOLog("B2L PM: system sleep disabled until CPU suspend/resume support is available\n");
 	/* B1L-0207: we are the time source (getGMTTimeOfDay); without IORTC the calendar waited 30 s, then 1970. */
 	publishResource("IORTC");
+	b2l_pmu = (volatile uint8_t *)ml_io_map(B2L_PMU_PHYS, B2L_PMU_SIZE);
+	IOLog("B2L PM: power off/restart through the PMU %s\n", b2l_pmu != NULL ? "ready" : "unavailable");
 	registerService();
 	IOLog("B2L: platform expert registered; software product iPhone17,2, Samsung B2L hardware\n");
 	return true;

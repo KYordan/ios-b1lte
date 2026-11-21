@@ -57,6 +57,7 @@ b2l_menu_event(struct b2l_menu *menu, enum b2l_menu_key key, uint64_t now_ms)
         case B2L_MENU_BOOT: return B2L_ACT_BOOT;
         case B2L_MENU_HOLD: return B2L_ACT_HOLD;
         case B2L_MENU_RECOVERY: return B2L_ACT_RECOVERY;
+        case B2L_MENU_POWEROFF: return B2L_ACT_POWEROFF;
         default: return B2L_ACT_REBOOT;
         }
     default:                        /* BACK: only stops the countdown */
