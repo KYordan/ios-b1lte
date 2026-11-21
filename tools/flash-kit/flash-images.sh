@@ -1,12 +1,14 @@
 #!/bin/bash
 # flash-images.sh — Flashe boot.img, system.img et userdata.img dans les partitions existantes
-# Téléphone cible : Galaxy S10 SM-G973F, série <SERIAL>, en TWRP
+# Téléphone cible : celui de B2L_BOARD (../b1l/board.sh) — S10 SM-G973F par défaut,
+# S10e SM-G970F avec B2L_BOARD=beyond0lte — en TWRP
 # ⚠️ Écriture réelle sur les partitions. Gardes obligatoires avant chaque écriture.
 
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../b1l/board.sh"
 
-ADB="${ADB:-$HOME/Developer/android/platform-tools/adb}${B2L_SERIAL:+ -s $B2L_SERIAL}"
-IMAGES_DIR="$HOME/Developer/Port iOS 26 to S10/flash-kit/images"
+adb="${ADB:-$HOME/Developer/android/platform-tools/adb}${B2L_SERIAL:+ -s $B2L_SERIAL}"
+IMAGES_DIR="${IMAGES_DIR:-$HOME/Developer/Port iOS 26 to S10/flash-kit/images}"
 
 echo "=== Flash des images iOS (flash-images.sh) ==="
 echo ""
@@ -18,16 +20,16 @@ if [ "$STATE" != "recovery" ]; then
   exit 1
 fi
 MODEL=$($adb shell getprop ro.boot.em.model 2>/dev/null </dev/null | tr -d '\r')
-if [ "$MODEL" != "SM-G973F" ]; then
-  echo "ERREUR : modèle inattendu ($MODEL)"
+if [ "$MODEL" != "$B2L_MODEL" ]; then
+  echo "ERREUR : modèle inattendu ($MODEL != $B2L_MODEL)"
   exit 1
 fi
-UID=$($adb shell id -u 2>/dev/null </dev/null | tr -d '\r')
-if [ "$UID" != "0" ]; then
-  echo "ERREUR : pas root (uid=$UID)"
+DEVICE_UID=$($adb shell id -u 2>/dev/null </dev/null | tr -d '\r')
+if [ "$DEVICE_UID" != "0" ]; then
+  echo "ERREUR : pas root (uid=$DEVICE_UID)"
   exit 1
 fi
-echo "Téléphone vérifié : TWRP root, SM-G973F"
+echo "Téléphone vérifié : TWRP root, $B2L_MODEL ($B2L_BOARD)"
 echo ""
 
 # 2. Vérifier que les images existent
@@ -54,7 +56,7 @@ guard_write() {
     echo "  GARDE ÉCHEC : taille $name = $actual (attendu $expected_size)"
     return 1
   fi
-  mounted=$(adb shell "grep -q '^$dev ' /proc/mounts && echo oui || echo non" </dev/null 2>/dev/null | tr -d '\r')
+  mounted=$($adb shell "grep -q '^$dev ' /proc/mounts && echo oui || echo non" </dev/null 2>/dev/null | tr -d '\r')
   if [ "$mounted" = "oui" ]; then
     echo "  GARDE ÉCHEC : $name est monté"
     return 1
@@ -91,7 +93,10 @@ flash_one() {
 
   # Readback + comparaison
   echo "  Readback et vérification SHA-256..."
-  READBACK_HASH=$($adb shell "echo 3 > /proc/sys/vm/drop_caches; dd if=$blk bs=4096 count=$((expected_size/4096)) 2>/dev/null | sha256sum" </dev/null | cut -d' ' -f1)
+  # Relire exactement la longueur de l'image (BOOT est plus petit que la partition).
+  local img_size
+  img_size=$(stat -f %z "$img" 2>/dev/null || stat -c %s "$img")
+  READBACK_HASH=$($adb shell "echo 3 > /proc/sys/vm/drop_caches; dd if=$blk bs=$img_size count=1 2>/dev/null | sha256sum" </dev/null | cut -d' ' -f1)
   echo "  Hash relu : $READBACK_HASH"
   if [ "$READBACK_HASH" = "$HOST_HASH" ]; then
     echo "  OK : $name écrit et vérifié (BOOT/SYSTEM/USERDATA-OK)"
@@ -102,22 +107,16 @@ flash_one() {
   echo ""
 }
 
-# 5. Flash boot (sda14, 57 671 680 octets)
-flash_one "boot" "sda14" 57671680 "$IMAGES_DIR/boot.img"
+# 5. Flash boot
+flash_one "boot" "$B2L_BOOT_DEV" "$B2L_BOOT_BYTES" "$IMAGES_DIR/boot.img"
 
-# 6. Flash system (sda25, 7 340 032 000 octets) — grosse image, utiliser chunks si > 5 Gio
-# Ici on tente dd direct ; si le téléphone stalle, utiliser flash-chunked.sh à la place.
-flash_one "system" "sda25" 7340032000 "$IMAGES_DIR/system.img"
+# 6. Flash system — grosse image ; si le téléphone stalle, utiliser flash-chunked.sh à la place.
+flash_one "system" "$B2L_SYSTEM_DEV" "$B2L_SYSTEM_BYTES" "$IMAGES_DIR/system.img"
 
-# 7. Flash userdata (sda34, 499 641 200 640 octets) — TRÈS grosse image
-# Utiliser flash-chunked.sh depuis b1l-tools/ pour les gros volumes.
-echo "=== Flash de userdata (sda34) ==="
-echo "ATTENTION : userdata fait ~465 Gio. Utilise b1l-tools/flash-chunked.sh pour une écriture par chunks vérifiés."
-echo "Exemple :"
-echo "  b1l-tools/flash-chunked.sh $IMAGES_DIR/userdata.img userdata /dev/block/sda34 499641200640"
-echo ""
-echo "Si tu veux quand même tenter un dd direct (déconseillé pour une si grosse image) :"
-echo "  flash_one userdata sda34 499641200640 $IMAGES_DIR/userdata.img"
+# 7. Flash userdata — TRÈS grosse partition : par chunks vérifiés uniquement.
+echo "=== Flash de userdata ($B2L_USERDATA_DEV) ==="
+echo "Utilise b1l-tools/flash-chunked.sh pour une écriture par chunks vérifiés :"
+echo "  B2L_BOARD=$B2L_BOARD b1l-tools/flash-chunked.sh $IMAGES_DIR/userdata.img userdata $B2L_USERDATA_DEV $B2L_USERDATA_BYTES"
 
 echo ""
 echo "=== Flash terminé ==="

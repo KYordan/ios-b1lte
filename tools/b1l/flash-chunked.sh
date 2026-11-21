@@ -4,7 +4,9 @@
 #
 #   flash-chunked.sh IMAGE BY-NAME EXPECTED_BLOCK EXPECTED_PARTITION_BYTES
 #   e.g. flash-chunked.sh ios26-userdata.hfs.img userdata /dev/block/sda34 499641200640
+#   (S10e: B2L_BOARD=beyond0lte ... userdata /dev/block/sda31 119126622208; the model guard follows board.sh)
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/board.sh"
 image=$1 name=$2 block=$3 partition_bytes=$4
 adb="${ADB:-$HOME/Developer/android/platform-tools/adb}${B2L_SERIAL:+ -s $B2L_SERIAL}"
 chunk=$((512 * 1024 * 1024)); bs=$((4 * 1024 * 1024)); per=$((chunk / bs))
@@ -14,7 +16,7 @@ size=$(stat -f %z "$image")
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/b1l-flash.XXXXXX"); trap 'rm -rf "$tmp"' EXIT
 
 guard() {
-  $adb shell "[ \"\$(id -u)\" = 0 ] && [ \"\$(getprop ro.boot.em.model)\" = SM-G973F ] &&
+  $adb shell "[ \"\$(id -u)\" = 0 ] && [ \"\$(getprop ro.boot.em.model)\" = $B2L_MODEL ] &&
     [ \"\$(readlink -f /dev/block/by-name/$name)\" = $block ] &&
     [ \"\$(blockdev --getsize64 $block)\" = $partition_bytes ] &&
     ! grep -q '^$block ' /proc/mounts && echo GUARD_OK" | grep -q GUARD_OK ||

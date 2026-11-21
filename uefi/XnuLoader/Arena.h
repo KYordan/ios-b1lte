@@ -5,9 +5,10 @@
 #include "b2l_ram_ranges.h"
 #define B2L_MIN_ARENA (1024ULL * 1024 * 1024)
 #define B2L_MAX_ARENA (4ULL * 1024 * 1024 * 1024)
-/* Live 8GiB board: preserve first upper bank and top40MiB EL2 early memory. */
+/* Preserve the first upper bank and the board's EL2 early memory at the top
+ * (40MiB on the 8GiB S10/S10+, 32MiB on the 6GiB S10e): b2l_ram_ranges.h. */
 #define B2L_RAM_START 0x900000000ULL
-#define B2L_RAM_END   0x9FD800000ULL
+#define B2L_RAM_END   B2L_RAM_ALLOW_END
 #define B2L_ALIGNMENT (2ULL * 1024 * 1024)
 #define B2L_EFI_HEADROOM (32ULL * 1024 * 1024)
 /* EFI descriptor wire layout is stable at its first 40 bytes; firmware may

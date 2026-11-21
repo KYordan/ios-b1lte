@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Test deterministic firmware launch preparation without a phone or full Mu tree."""
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -16,12 +17,40 @@ BINDINGS = "Silicon/Silicium/SiliciumPkg/SiliciumPkg.dsc.inc"
 GIC = "Mu_Basecore/ArmPkg/Drivers/ArmGicDxe/GicV2/ArmGicV2Dxe.c"
 
 
+RAM_MANAGER = "Silicon/Samsung/SamsungPkg/Library/RamManagerLib/RamManager.c"
+# Minimal shape of the external RamManager.c that xnu_ram_manager_profile edits.
+RAM_MANAGER_STUB = "STATIC EFI_PHYSICAL_ADDRESS MemoryStart;\n" + """EFI_STATUS
+GetMemoryHoles ()
+{
+""" + "".join("""  if (!EFI_ERROR (Status)) {
+    HoleRange[%d].Length  = HoleLength;
+  }
+""" % i for i in range(4)) + """}
+
+EFI_STATUS
+EFIAPI
+GetMemoryData (VOID)
+{
+  Probe ();
+  return EFI_SUCCESS;
+}
+
+EFI_STATUS
+GetUsableMemoryRanges (EFI_MEMORY_RANGE **Range, UINT8 *RangeCount)
+{
+  Original ();
+}
+"""
+
+
 class PreparationTests(unittest.TestCase):
-    def fixture(self, root):
+    def fixture(self, root, board="beyond2lte"):
         (root / "Mu_Basecore").mkdir()
+        pkg = f"Platforms/Samsung/{board}Pkg"
         files = {
-            "Platforms/Samsung/beyond2ltePkg/beyond2lte.dsc": "[PcdsFixedAtBuild]\n  gPcBdsPkgTokenSpaceGuid.PcdShellFile|{ 0 }\n[LibraryClasses]\n MemoryMapLib|beyond2ltePkg/Library/MemoryMapLib/MemoryMapLib.inf\n",
-            "Platforms/Samsung/beyond2ltePkg/beyond2lte.fdf": "[FV.FvMain]\n[FV.FVMAIN_COMPACT]\n",
+            f"{pkg}/{board}.dsc": f"[PcdsFixedAtBuild]\n  gPcBdsPkgTokenSpaceGuid.PcdShellFile|{{ 0 }}\n[LibraryClasses]\n MemoryMapLib|{board}Pkg/Library/MemoryMapLib/MemoryMapLib.inf\n",
+            f"{pkg}/{board}.fdf": "[FV.FvMain]\n[FV.FVMAIN_COMPACT]\n",
+            RAM_MANAGER: RAM_MANAGER_STUB,
             BINDINGS: "PlatformBootManagerLib|SiliciumPkg/Library/BootManagerLib/BootManagerLib.inf\n",
             MANAGER: """VOID PlatformBootManagerBeforeConsole () {
   MsBootOptionsLibRegisterDefaultBootOptions ();
@@ -33,7 +62,8 @@ VOID PlatformBootManagerAfterConsole () {
             INF: "[LibraryClasses]\n  PcdLib\n[Pcd]\n  gEfiMdePkgTokenSpaceGuid.PcdPlatformBootTimeOut\n",
             GIC: "VOID ArmGicV2DisableInterruptInterface (UINTN GicInterruptInterfaceBase) { OriginalDisable (); }\n"
                  "VOID GicV2ExitBootServicesEvent (EFI_EVENT Event, VOID *Context) { OriginalDrain (); }\n",
-            "Platforms/Samsung/beyond2ltePkg/Library/MemoryMapLib/MemoryMapLib.c": '  {"Upper bank guard", 0x980000000ULL, 0x080000000ULL, AddMem, MEM_RES, SYS_MEM_CAP, Reserv, WRITE_THROUGH},',
+            f"{pkg}/Library/MemoryMapLib/MemoryMapLib.c": '  {"Upper bank guard", 0x980000000ULL, 0x080000000ULL, AddMem, MEM_RES, SYS_MEM_CAP, Reserv, WRITE_THROUGH},\n'
+                                                          '  // DDR Regions\n',
             "Loader.efi": "MZ-test-loader",
         }
         for name, text in files.items():
@@ -41,10 +71,30 @@ VOID PlatformBootManagerAfterConsole () {
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)
 
-    def prepare(self, root):
+    def prepare(self, root, board=None):
+        env = dict(os.environ)
+        env.pop("B2L_BOARD", None)
+        if board:
+            env["B2L_BOARD"] = board
         return subprocess.run([sys.executable, str(PREPARE), "--mu", str(root),
                                "--loader", str(root / "Loader.efi"), "--loader-guid", GUID],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, env=env)
+
+    def test_memory_profile_reserves_absent_s10e_ddr(self):
+        for board, absent_top in (("beyond2lte", False), ("beyond0lte", True)):
+            with tempfile.TemporaryDirectory(prefix="b2l-memory-test-") as directory:
+                root = Path(directory)
+                self.fixture(root, board)
+                result = self.prepare(root, board)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                text = (root / f"Platforms/Samsung/{board}Pkg/Library/MemoryMapLib/MemoryMapLib.c").read_text()
+                self.assertNotIn('"Upper bank guard"', text)
+                self.assertIn('"B2L absent DDR", 0xBAB00000ULL', text)
+                self.assertEqual('"B2L absent DDR", 0x980000000ULL, 0x80000000ULL' in text, absent_top, board)
+                el2 = '"B2L DT el2_earlymem", 0x97E000000ULL, 0x2000000ULL' if absent_top else \
+                      '"B2L DT el2_earlymem", 0x9FD800000ULL, 0x2800000ULL'
+                self.assertIn(el2, text)
+                self.assertIn("B2L RAM hole normalization v1", (root / RAM_MANAGER).read_text())
 
     def test_touch_enables_real_soc_transport_and_is_idempotent(self):
         with tempfile.TemporaryDirectory(prefix="b2l-touch-firmware-") as directory:

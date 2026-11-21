@@ -11,6 +11,7 @@
 # (state: pending, running, done, failed); progress/current points at the newest one.
 #   example: bash b1l-build.sh 0082 b2l-metal-v38 --mesa
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/board.sh" || exit 1   # B2L_BOARD=beyond0lte for the S10e
 N=$1; SET=$2; shift 2
 MESA=0; LIBS=1; KERNEL=1
 for a in "$@"; do case $a in --mesa) MESA=1 ;; --no-libs) LIBS=0 ;; --no-kernel) KERNEL=0 ;; esac; done
@@ -56,14 +57,14 @@ touch xnu/iokit/Kernel/arm/B2LPlatformExpert.cpp
 	BUILD_JOBS=4 BUILD_MEMORY_BYTES=12884901888 BUILD_DIR=$R/out/xnu-b2l-ref \
 	bash scripts/build-kernel.sh CWARNFLAGS=-w CXXWARNFLAGS=-w
 K=$R/out/xnu-b2l-ref/obj/DEVELOPMENT_ARM64_B2L/mach.development.b2l
-W=$S/mu-work-b1l-touch; E=${PY_ENV:-$HOME/Developer/tools/mamba/envs/s10}/bin
+W=${MU_WORK:-$S/mu-work-b1l-touch}; E=${PY_ENV:-$HOME/Developer/tools/mamba/envs/s10}/bin
 if [ "$(strings -a "$K" | grep -c "$SET")" = 0 ]; then   # not grep -q: with pipefail its early exit fails the pipe
 	set_stage package failed "the kernel does not name $SET"; echo "B1L-$N: the kernel does not name $SET"; exit 1
 fi
 run_stage package "$R/out/package-$N.log" python3 scripts/package-boot.py --mu $W \
-	--firmware $W/Build/beyond1ltePkg/RELEASE_CLANGPDB/FV/SILICIUM_UEFI.fd --kernel "$K" \
+	--firmware $W/Build/$B2L_UEFI_PKG/RELEASE_CLANGPDB/FV/SILICIUM_UEFI.fd --kernel "$K" \
 	--loader $W/Build/B2LXnu/RELEASE_CLANGPDB/AARCH64/XnuLoader.efi --output-dir out/b1l-metal-$N \
-	--max-image-bytes 57671680 --boot-partition-bytes 57671680 --clang $E/clang --objcopy $E/llvm-objcopy
+	--max-image-bytes $B2L_BOOT_BYTES --boot-partition-bytes $B2L_BOOT_BYTES --clang $E/clang --objcopy $E/llvm-objcopy
 H=$(shasum -a 256 out/b1l-metal-$N/boot.img | cut -c1-64)
 echo "boot image $H"
 run_stage system "$S/flash-$N-system.log" env GL_BUILD=$S/build-metal bash $S/b1l-tools/system-add-fast.sh "$SET"

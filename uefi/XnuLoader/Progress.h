@@ -2,6 +2,8 @@
 #ifndef B2L_PROGRESS_H
 #define B2L_PROGRESS_H
 #include "MachO.h"
+/* Narrowest panel the loader accepts (S10e: 1080 px); see Progress.c. */
+#define B2L_PROGRESS_MIN_W 768
 struct b2l_handoff_info {
     b2l_u64 panel_base, stride;
     b2l_u64 kernel_start, kernel_end;

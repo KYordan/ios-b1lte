@@ -20,8 +20,18 @@ rsync -a "$repo_root/uefi/" "$WORKSPACE/B2LXnuPkg/"
 rsync -a "$repo_root/common/cache/" "$WORKSPACE/B2LXnuPkg/XnuLoader/"
 rsync -a "$repo_root/common/smp/" "$WORKSPACE/B2LXnuPkg/XnuLoader/"
 rsync -a "$repo_root/common/memory/" "$WORKSPACE/B2LXnuPkg/XnuLoader/"
-# Optional board display profile for the loader, e.g. B2L_FB_LOGICAL=880x1912 B2L_DISPLAY_SCALE=2.
+# B2L_BOARD (scripts/b2l_board.py) supplies the board's RAM ceiling and its
+# default display profile; B2L_FB_LOGICAL / B2L_DISPLAY_SCALE set by hand win.
 display_options=()
+if [[ -n "${B2L_BOARD:-}" ]]; then
+  board_profile="$("$PYTHON_COMMAND" "$repo_root/scripts/b2l_board.py" shell)" || exit 1
+  board_value() { sed -n "s/^$1=//p" <<<"$board_profile"; }
+  display_options+=(-D "B2L_RAM_ALLOW_END=$(board_value B2L_RAM_ALLOW_END)")
+  : "${B2L_FB_LOGICAL:=$(board_value B2L_FB_LOGICAL)}"
+  : "${B2L_DISPLAY_SCALE:=$(board_value B2L_DISPLAY_SCALE)}"
+  echo "board $B2L_BOARD: RAM end $(board_value B2L_RAM_ALLOW_END), display ${B2L_FB_LOGICAL:-1:1} @${B2L_DISPLAY_SCALE}x" >&2
+fi
+# Optional board display profile for the loader, e.g. B2L_FB_LOGICAL=880x1912 B2L_DISPLAY_SCALE=2.
 if [[ -n "${B2L_FB_LOGICAL:-}" ]]; then
   [[ "$B2L_FB_LOGICAL" =~ ^([0-9]+)x([0-9]+)$ ]] || { echo "B2L_FB_LOGICAL must be WxH" >&2; exit 1; }
   display_options+=(-D "B2L_FB_LOGICAL_W=${BASH_REMATCH[1]}" -D "B2L_FB_LOGICAL_H=${BASH_REMATCH[2]}")

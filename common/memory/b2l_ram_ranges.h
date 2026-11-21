@@ -5,7 +5,13 @@
  * active firmware/stack/framebuffer/EL2 are excluded. A range is admitted
  * only after actual EFI conventional-memory allocation, never from this
  * whitelist alone. No dynamic Linux CMA allocation is treated as a firmware
- * reservation: RamManagerDxe also removes live secure-world memory holes. */
+ * reservation: RamManagerDxe also removes live secure-world memory holes.
+ * B2L_RAM_ALLOW_END is where the upper bank's usable DDR stops (the board's
+ * el2_earlymem): 0x9FD800000 on the 8GiB S10/S10+, 0x97E000000 on the 6GiB
+ * S10e. The loader is built with the board value (scripts/build-efi.sh). */
+#ifndef B2L_RAM_ALLOW_END
+#define B2L_RAM_ALLOW_END 0x9FD800000ULL
+#endif
 #define B2L_RAM_MAX_RANGES 128u
 #define B2L_RAM_PAGE 16384ULL
 struct b2l_ram_range { unsigned long long base, size; };
@@ -20,7 +26,7 @@ static const struct b2l_ram_range b2l_ram_allowlist[] = {
     {0xd1600000ULL,0xea00000ULL},
     {0xe1900000ULL,0x9a08000ULL},
     {0xed210000ULL,0x2df0000ULL},
-    {0x88ad00000ULL,0x172b00000ULL},
+    {0x88ad00000ULL,B2L_RAM_ALLOW_END-0x88ad00000ULL},
 };
 static inline int b2l_ram_allowed(unsigned long long base,unsigned long long size)
 {

@@ -73,12 +73,37 @@ Panel ID `SDC_910115` (`91 01 15`); the S10 s6e3ha9 reports DDI `0x37 0x4d`. The
 comes from the UEFI GOP, so the kernel is unaffected, but everything sized for 1440 × 3040
 (boot menu font cells, tests, wallpaper crop in `build-springboard-dylib.py`) needs 1080 × 2280.
 
-## What has to change for `beyond0lte`
+## Port changes (branch `beyond0lte`)
 
-1. `scripts/b2l_board.py`: add `beyond0lte` → `SM-G970F`, userdata `/dev/block/sda31`.
-2. Model and size guards in `tools/b1l/*.sh` and `tools/flash-kit/*.sh` (`SM-G973F`, sda34, system size).
-3. `common/memory/b2l_ram_ranges.h` and the loader RAM profile: upper bank ends at `0x980000000`,
-   `el2_earlymem` at `0x97E000000`.
-4. UEFI: a `beyond0ltePkg` built like `scripts/make-board-platform.py`, with this phone's DTB and a 1080 × 2280 GOP.
-5. Boot menu and graphics tests for 1080 × 2280.
-6. Install TWRP for `beyond0lte` and take the full partition backup before any write.
+| Area | Change |
+| --- | --- |
+| Board table | `scripts/b2l_board.py` and `tools/b1l/board.sh` describe `beyond0lte` (model, partitions, RAM end, display); `tests/test_board_profiles.py` keeps them in step with each other and with the DT evidence |
+| DT evidence | `common/memory/beyond0lte-6g-dt.json` from the live DTB (`tools/b1l/fdt2json.py`); only `camera`, `el2_earlymem` and the missing `memory@980000000` differ from the S10 |
+| UEFI memory map | `prepare-boot-firmware.py` takes the board's DT evidence and reserves `0x980000000+0x80000000` as absent DDR on top of the two low-bank gaps |
+| Loader RAM | `B2L_RAM_ALLOW_END` (`b2l_ram_ranges.h`, `Arena.h`) = `0x97E000000` for the S10e, passed by `build-efi.sh` from `B2L_BOARD`; the kernel keeps the S10 superset, the loader decides |
+| UEFI platform | `make-board-platform.py --board beyond0lte` builds `beyond0ltePkg` and retargets the frame-buffer PCDs to 1080 × 2280 (stops if it cannot find them) |
+| Display | Loader accepted GOPs ≥ 1184 px only: now ≥ 768 px with a narrow progress panel. Boot menu has a compact layout below 2600 px. Default iOS canvas 750 × 1584 @2x (375 × 792 pt) |
+| Flash tools | Every guard (model, block, size) reads `board.sh`. `tools/flash-kit` also fixed: `$adb` was never set, `UID` is read-only in bash, block paths were compared without `/dev/block/`, vbmeta was sda11 |
+| SYSTEM image | `build-system-image.sh` sizes from the board; ~164 MiB stay free next to the 5.52 GiB native cache (`NATIVE_CACHE_MIB` to shrink it) |
+
+Not verified: no build ran (needs the Mac toolchain), no flash, no boot. The C host tests changed here
+(`progress_test.c`, `boot_menu_draw_test.c`) were not compiled on the Windows host.
+
+## Building for the S10e
+
+```bash
+export B2L_BOARD=beyond0lte
+# UEFI platform from the S10+ overlay, with the phone's live DTB (device-s10e/dump/live.dtb)
+python3 scripts/make-board-platform.py --board beyond0lte --mu "$MU_WORK" --dtb device-s10e/dump/live.dtb
+B2L_ENABLE_TOUCH=1 WORKSPACE="$MU_WORK" scripts/build-boot-firmware.sh   # RAM end and display come from the board
+tools/b1l/build-system-image.sh
+MU_WORK="$MU_WORK" bash tools/b1l/b1l-build.sh 0001 b2l-metal-v1
+```
+
+Before the first write: TWRP for `beyond0lte`, `tools/flash-kit/backup-partitions.sh`, and `OEM LOCK`/`KG STATE` checked in Download mode.
+
+## Open questions
+
+1. Does the external Mu `MemoryMapLib` describe DDR up to `0xA00000000`, or does RamManagerDxe read the real size? The absent-DDR reservation covers either case `[VERIFY]` on the first UEFI boot.
+2. The GOP stride on the S10e (1080 or padded) `[VERIFY]` from the loader log.
+3. sec_ts Y761 behaves like the S10's Y771 `[VERIFY]` on the first boot with touch.

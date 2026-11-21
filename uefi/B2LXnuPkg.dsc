@@ -13,6 +13,9 @@
   DEFINE B2L_DISPLAY_SCALE       = 3
   DEFINE B2L_FB_LOGICAL_W        = 0
   DEFINE B2L_FB_LOGICAL_H        = 0
+  # Top of usable upper-bank DDR (common/memory/b2l_ram_ranges.h); the S10e
+  # (beyond0lte, 6 GiB) is built with 0x97E000000ULL.
+  DEFINE B2L_RAM_ALLOW_END       = 0x9FD800000ULL
 
 [LibraryClasses]
   ArmLib|ArmPkg/Library/ArmLib/ArmBaseLib.inf
@@ -36,4 +39,4 @@
   B2LXnuPkg/XnuLoader/XnuLoader.inf
 
 [BuildOptions]
-  *_*_*_CC_FLAGS = -DB2L_DISPLAY_SCALE=$(B2L_DISPLAY_SCALE) -DB2L_FB_LOGICAL_W=$(B2L_FB_LOGICAL_W) -DB2L_FB_LOGICAL_H=$(B2L_FB_LOGICAL_H)
+  *_*_*_CC_FLAGS = -DB2L_DISPLAY_SCALE=$(B2L_DISPLAY_SCALE) -DB2L_FB_LOGICAL_W=$(B2L_FB_LOGICAL_W) -DB2L_FB_LOGICAL_H=$(B2L_FB_LOGICAL_H) -DB2L_RAM_ALLOW_END=$(B2L_RAM_ALLOW_END)

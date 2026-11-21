@@ -2,11 +2,12 @@
 # hash-device.sh BLOCKDEV BYTES: one sha256 per 4 MiB block of the partition, in order, computed ON THE PHONE (8 workers);
 # nothing crosses USB but the hashes. Read-only. Same guards for the device as flash-delta.sh.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/board.sh"
 expect=$1 psize=$2
 adb="${ADB:-$HOME/Developer/android/platform-tools/adb}${B2L_SERIAL:+ -s $B2L_SERIAL}"
 bs=$((4 * 1024 * 1024)); n=$((psize / bs)); per=$(( (n + 7) / 8 ))
 [[ "$($adb get-state </dev/null)" == recovery ]] || { echo "not in TWRP" >&2; exit 1; }
-[[ "$($adb shell getprop ro.boot.em.model </dev/null | tr -d '\r')" == SM-G973F ]] || { echo "wrong model" >&2; exit 1; }
+[[ "$($adb shell getprop ro.boot.em.model </dev/null | tr -d '\r')" == "$B2L_MODEL" ]] || { echo "wrong model" >&2; exit 1; }
 dsize=$($adb shell blockdev --getsize64 $expect </dev/null | tr -d '\r')
 # HASH_PREFIX=1 (pull-delta.sh, read-only): hash only the first BYTES of a larger partition
 [[ "$dsize" == "$psize" ]] || { [[ "${HASH_PREFIX:-0}" == 1 && "$dsize" -gt "$psize" ]]; } || { echo "size mismatch" >&2; exit 1; }

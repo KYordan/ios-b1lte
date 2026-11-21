@@ -1,11 +1,13 @@
 #!/bin/bash
 # check-device.sh — Vérifie l'état du téléphone avant toute opération de flash
-# Téléphone cible : Galaxy S10 SM-G973F, série <SERIAL>, en TWRP
+# Téléphone cible : celui de B2L_BOARD (../b1l/board.sh) — S10 SM-G973F par défaut,
+# S10e SM-G970F avec B2L_BOARD=beyond0lte — en TWRP
 
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../b1l/board.sh"
 
-ADB="${ADB:-$HOME/Developer/android/platform-tools/adb}${B2L_SERIAL:+ -s $B2L_SERIAL}"
-EXPECTED_MODEL="SM-G973F"
+adb="${ADB:-$HOME/Developer/android/platform-tools/adb}${B2L_SERIAL:+ -s $B2L_SERIAL}"
+EXPECTED_MODEL="$B2L_MODEL"
 
 echo "=== Vérification du téléphone (check-device.sh) ==="
 echo ""
@@ -21,10 +23,10 @@ fi
 echo "   OK : téléphone en TWRP"
 
 # 2. Root
-UID=$($adb shell id -u 2>/dev/null </dev/null | tr -d '\r' || echo "?")
-echo "-> UID sur le téléphone : $UID"
-if [ "$UID" != "0" ]; then
-  echo "ERREUR : le téléphone n'est pas root (uid=$UID)"
+DEVICE_UID=$($adb shell id -u 2>/dev/null </dev/null | tr -d '\r' || echo "?")
+echo "-> UID sur le téléphone : $DEVICE_UID"
+if [ "$DEVICE_UID" != "0" ]; then
+  echo "ERREUR : le téléphone n'est pas root (uid=$DEVICE_UID)"
   exit 1
 fi
 echo "   OK : root (uid=0)"
@@ -41,14 +43,14 @@ echo "   OK : modèle $EXPECTED_MODEL confirmé"
 # 4. Partitions cibles et leurs blocs
 echo ""
 echo "=== Partitions cibles ==="
-for entry in "boot:sda14:57671680" "system:sda25:7340032000" "userdata:sda34:499641200640"; do
+for entry in "boot:$B2L_BOOT_DEV:$B2L_BOOT_BYTES" "system:$B2L_SYSTEM_DEV:$B2L_SYSTEM_BYTES" "userdata:$B2L_USERDATA_DEV:$B2L_USERDATA_BYTES"; do
   name="${entry%%:*}"
   rest="${entry#*:}"
   blk="${rest%%:*}"
   size="${rest##*:}"
   dev=$($adb shell readlink -f /dev/block/by-name/$name 2>/dev/null </dev/null | tr -d '\r' || echo "?")
   actual=$($adb shell blockdev --getsize64 $dev 2>/dev/null </dev/null | tr -d '\r' || echo "?")
-  mounted=$(adb shell "grep -q '^$dev ' /proc/mounts && echo MONTÉ || echo libre" </dev/null 2>/dev/null | tr -d '\r')
+  mounted=$($adb shell "grep -q '^$dev ' /proc/mounts && echo MONTÉ || echo libre" </dev/null 2>/dev/null | tr -d '\r')
   echo "  $name -> $dev (attendu $blk) | taille: $actual (attendu $size) | $mounted"
   if [ "$dev" != "$blk" ]; then
     echo "   ERREUR : $name ne pointe pas vers $blk"

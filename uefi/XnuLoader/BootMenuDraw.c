@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause
  * Boot menu screen. Laid out for the S10 portrait panel (1440 x 3040); every pixel write is clipped, so another
- * size only crops. shortcut: the layout does not scale down below ~1300 px wide, add a scale step if another
- * board needs it.
+ * size only crops. The S10e panel (1080 x 2280) still fits: the widest line, the "Bixby  stop the timer" key
+ * hint, ends at 1056 px. Below ~1060 px wide add a scale step.
  * Font: Spleen 32x64 and 16x32 by Frederic Cambus, BSD-2-Clause (notice in FontSpleen*.h).
  */
 #include "BootMenuDraw.h"
@@ -114,7 +114,11 @@ static void note_lines(const struct canvas *c, int x, int y, unsigned cols, cons
 void b2l_menu_render(uint32_t *pixels, uint32_t stride, uint32_t width, uint32_t height, const struct b2l_menu_view *v)
 {
     const struct canvas c = { pixels, stride, width, height };
-    const int margin = 96, cw = (int)width - 2 * margin, ch = 208, gap = 36, H = (int)height;
+    /* Compact rows below 2600 px (S10e, 2280 px): the cards, countdown and a four-line note then end above the key
+     * hints (cards from 24 %, 176 px cards, note right under the countdown instead of at 70 %). */
+    const int H = (int)height, compact = H < 2600;
+    const int margin = 96, cw = (int)width - 2 * margin, ch = compact ? 176 : 208, gap = compact ? 24 : 36;
+    int note_y = H * 70 / 100;
     char line[64];
 
     for (uint32_t y = 0; y < height; y++)
@@ -125,12 +129,12 @@ void b2l_menu_render(uint32_t *pixels, uint32_t stride, uint32_t width, uint32_t
     y += (int)big.h * 2 + 24;
     centered(&c, &big, 1, y, "Galaxy S10 - XNU loader", DIM);
 
-    y = H * 29 / 100;
+    y = H * (compact ? 24 : 29) / 100;
     for (unsigned i = 0; i < B2L_MENU_COUNT; i++, y += ch + gap) {
-        int sel = i == v->selected;
+        int sel = i == v->selected, top = compact ? 24 : 36;
         round_rect(&c, margin, y, cw, ch, 40, sel ? ACCENT : CARD, BG);
-        text(&c, &big, 1, margin + 64, y + 36, labels[i], TEXT);
-        text(&c, &small, 1, margin + 64, y + 36 + (int)big.h + 16, details[i], sel ? DIM_SEL : DIM);
+        text(&c, &big, 1, margin + 64, y + top, labels[i], TEXT);
+        text(&c, &small, 1, margin + 64, y + top + (int)big.h + 16, details[i], sel ? DIM_SEL : DIM);
         if (sel) text(&c, &big, 1, margin + cw - 64 - (int)big.w, y + (ch - (int)big.h) / 2, ">", TEXT);
     }
 
@@ -148,8 +152,9 @@ void b2l_menu_render(uint32_t *pixels, uint32_t stride, uint32_t width, uint32_t
     } else {
         centered(&c, &big, 1, y, "Automatic boot is off", DIM);
     }
+    if (compact) note_y = y + (int)big.h + 40 + 16 + 40;   /* under the countdown bar */
 
-    if (v->note) note_lines(&c, margin, H * 70 / 100, (unsigned)cw / big.w, v->note);
+    if (v->note) note_lines(&c, margin, note_y, (unsigned)cw / big.w, v->note);
 
     static const char *const keys[3][2] = { { "Volume +/-", "move" }, { "Power", "select" }, { "Bixby", "stop the timer" } };
     int kx = margin + 64;

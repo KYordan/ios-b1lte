@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build the S10 SYSTEM (sda25) image: Journaled HFS+ holding the native cache
+# Build the SYSTEM image of the B2L_BOARD phone (board.sh; S10 by default): Journaled HFS+ holding the native cache
 # b2l-cache.bin, followed by the 16 MiB persistent log region, exactly the
 # partition length. Layout rules: xnu bsd/dev/b2l_ufs_aux.c, uefi CacheEfi.c.
 # Local files only; touches no phone. No sudo needed.
@@ -9,10 +9,14 @@ repo="$port/beyond2lte-ios"
 python="${PY_ENV:-$HOME/Developer/tools/mamba/envs/s10}/bin/python3"
 root_image="$repo/out/ipsw/ios26-userdata.hfs.img"
 out="$repo/out/system"
-partition_bytes=7340032000            # /dev/block/sda25, measured on the S10
+. "$(dirname "${BASH_SOURCE[0]}")/board.sh"
+partition_bytes=$B2L_SYSTEM_BYTES     # SYSTEM measured on the phone (S10 7340032000, S10e 5976883200)
 log_bytes=$((16 * 1024 * 1024))       # B2L_SYSTEM_LOG_BYTES
 hfs_bytes=$((partition_bytes - log_bytes))
-cache_target=$((5520 * 1024 * 1024))  # about 5.52 GiB, as on the S10+
+# About 5.52 GiB, as on the S10+. The S10e SYSTEM leaves ~164 MiB for HFS metadata and the
+# Metal/Wi-Fi files system-add-fast.sh adds; NATIVE_CACHE_MIB shrinks the cache if they do not fit.
+cache_target=$(( ${NATIVE_CACHE_MIB:-5520} * 1024 * 1024 ))
+(( cache_target + 128 * 1024 * 1024 <= hfs_bytes )) || { echo "native cache too large for $B2L_BOARD SYSTEM" >&2; exit 1; }
 cache_bytes=$(( 8192 + (cache_target - 8192) / 24576 * 24576 ))
 image="$out/b1l-system.img"
 

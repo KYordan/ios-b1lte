@@ -37,12 +37,15 @@ void B2lProgressPrepare(b2l_u64 Base, b2l_u64 Stride, b2l_u64 Width, b2l_u64 Hei
                         struct b2l_handoff_info *I)
 {
     static const char *Labels[]={"MAP READY","EBS RETURN","HANDOFF","CACHE CLEAN","MMU OFF","KERNEL JUMP"};
-    b2l_size X0, Y0;
+    b2l_size X0, Y0, PanelW;
     I->panel_base=0;
-    if(Width<1184 || Height<864) return;
-    X0=(b2l_size)((Width-1184)/2); Y0=(b2l_size)(Height/3);
+    /* 1184 px on the 1440 px S10/S10+; the longest label ends at 192+11*48 =
+     * 720 px, so a 1080 px panel (S10e) gets the narrow 768 px variant. */
+    if(Width<B2L_PROGRESS_MIN_W || Height<864) return;
+    PanelW=Width>=1184?1184:B2L_PROGRESS_MIN_W;
+    X0=(b2l_size)((Width-PanelW)/2); Y0=(b2l_size)(Height/3);
     I->panel_base=Base+Y0*Stride+X0*4; I->stride=Stride;
-    Rect(I->panel_base,Stride,0,0,1184,6*96,0);
+    Rect(I->panel_base,Stride,0,0,PanelW,6*96,0);
     for(b2l_size S=0;S<6;++S){
       B2lProgressSet(I,S,0x00303030);
       for(b2l_size C=0;Labels[S][C];++C){const b2l_u8 *G=Glyph(Labels[S][C]);

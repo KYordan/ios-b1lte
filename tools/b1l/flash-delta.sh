@@ -5,6 +5,7 @@
 # written with fsync, and read back. The final pass re-hashes every block.
 #   flash-delta.sh IMAGE BY-NAME EXPECTED_BLOCK EXPECTED_PARTITION_BYTES
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/board.sh"
 image=$1 name=$2 expect=$3 psize=$4
 adb="${ADB:-$HOME/Developer/android/platform-tools/adb}${B2L_SERIAL:+ -s $B2L_SERIAL}"
 # adb shell reads stdin: every call below must not consume the caller's input.
@@ -14,7 +15,7 @@ size=$(stat -f %z "$image")
 n=$((size / bs))
 [[ "$($adb get-state)" == recovery ]] || { echo "not in TWRP" >&2; exit 1; }
 [[ "$($adb shell id -u | tr -d '\r')" == 0 ]] || { echo "no root" >&2; exit 1; }
-[[ "$($adb shell getprop ro.boot.em.model | tr -d '\r')" == SM-G973F ]] || { echo "wrong model" >&2; exit 1; }
+[[ "$($adb shell getprop ro.boot.em.model | tr -d '\r')" == "$B2L_MODEL" ]] || { echo "wrong model" >&2; exit 1; }
 [[ "$($adb shell readlink -f /dev/block/by-name/$name | tr -d '\r')" == "$expect" ]] || { echo "by-name mismatch" >&2; exit 1; }
 [[ "$($adb shell blockdev --getsize64 $expect | tr -d '\r')" == "$psize" ]] || { echo "size mismatch" >&2; exit 1; }
 (( size <= psize )) || { echo "image larger than partition" >&2; exit 1; }

@@ -13,7 +13,8 @@ T=${S10_PORT:-$HOME/Developer/s10-port}/b1l-tools
 A="${ADB:-$HOME/Developer/android/platform-tools/adb}${B2L_SERIAL:+ -s $B2L_SERIAL}"
 L=${B2L_ROOT:-$HOME/Developer/s10-port/beyond2lte-ios}/out/live
 O=${GL_BUILD:-$HOME/Developer/s10-port/build-gl}/$V
-DEV=/dev/block/sda25; BYTES=7340032000
+. "$(dirname "${BASH_SOURCE[0]}")/board.sh"
+DEV=$B2L_SYSTEM_DEV; BYTES=$B2L_SYSTEM_BYTES
 [ -d "$O" ]
 [ "$($A get-state </dev/null)" = recovery ]
 cd "$L"

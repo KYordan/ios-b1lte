@@ -23,6 +23,20 @@ int main(int argc, char **argv)
         b2l_menu_render(px, STRIDE, W, H, &o);
         b2l_menu_render(px, 100, 100, 100, &o);
     }
+    {   /* S10e panel (1080 x 2280): drawn, and nothing past the width or the last row */
+        enum { W2 = 1080, H2 = 2280, S2 = 1088 };
+        uint32_t *q = calloc((size_t)S2 * H2 + 1, 4);
+        q[(size_t)S2 * H2] = 0xdeadbeef;
+        b2l_menu_render(q, S2, W2, H2, &v);
+        assert(q[(size_t)S2 * H2] == 0xdeadbeef);
+        unsigned acc2 = 0;
+        for (size_t y = 0; y < H2; y++) {
+            for (size_t x = W2; x < S2; x++) assert(q[y * S2 + x] == 0);
+            for (size_t x = 0; x < W2; x++) acc2 += q[y * S2 + x] == 0x0a84ff;
+        }
+        assert(acc2 > 50000);
+        free(q);
+    }
     b2l_menu_render(px, STRIDE, W, H, &v);
     if (argc > 1) {
         FILE *f = fopen(argv[1], "wb");

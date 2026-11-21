@@ -33,7 +33,8 @@ def xnu_memory_profile(source, board):
     if not any(x in source for x in expected):raise ValueError("unrecognized firmware memory profile")
     lines=[l for l in source.splitlines(True) if not any(x in l for x in expected)]
     source=''.join(lines)
-    evidence=Path(__file__).resolve().parents[1]/f"common/memory/{board}-8g-dt.json"
+    profile=b2l_board.profile(board)
+    evidence=Path(__file__).resolve().parents[1]/"common/memory"/profile['dt_evidence']
     nodes=json.loads(evidence.read_text());entries=[]
     # Exact fixed reservations, except the existing separately named U-H row.
     for name,p in nodes.items():
@@ -43,8 +44,9 @@ def xnu_memory_profile(source, board):
         base=int.from_bytes(raw[:8],'big');size=int.from_bytes(raw[8:],'big')
         if base==0x87000000 and size==0x200000:continue
         entries.append('  {"B2L DT '+name.split('/')[-1]+'", 0x%XULL, 0x%XULL, AddMem, MEM_RES, SYS_MEM_CAP, Reserv, WRITE_THROUGH},\n'%(base,size))
-    # These two low-bank gaps are absent from the live memory nodes.
-    for base,size in ((0xBAB00000,0x5500000),(0xE0000000,0x1900000)):
+    # DDR absent from the live memory nodes: the two low-bank gaps on every
+    # board, plus the upper 2 GiB on the 6 GiB S10e (the external map is 8 GiB).
+    for base,size in profile['absent_ddr']:
         entries.append('  {"B2L absent DDR", 0x%XULL, 0x%XULL, AddMem, MEM_RES, SYS_MEM_CAP, Reserv, WRITE_THROUGH},\n'%(base,size))
     at=source.index('  // DDR Regions')
     source=source[:at]+marker+'\n'+''.join(entries)+source[at:]
