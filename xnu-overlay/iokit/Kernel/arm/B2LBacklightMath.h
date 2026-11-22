@@ -13,14 +13,16 @@
 #define B2L_BL_MAX_NITS              420u
 #define B2L_BL_RANGE                 65536u
 
-/* AOR for a luminance at the bootloader's gamma: emission share = nits / 420 of the brightest entry's. */
+#define B2L_BL_MAX_NITS16            (B2L_BL_MAX_NITS << 16)
+
+/* AOR for a luminance (16.16 nits) at the bootloader's gamma: emission share = nits / 420 of the brightest entry's. */
 static inline uint32_t
-b2l_bl_aor_for_nits(uint32_t nits)
+b2l_bl_aor_for_nits16(uint32_t n16)
 {
-	if (nits >= B2L_BL_MAX_NITS) {
+	if (n16 >= B2L_BL_MAX_NITS16) {
 		return B2L_BL_AOR_BRIGHTEST;
 	}
-	uint32_t emit = (B2L_BL_VTOTAL - B2L_BL_AOR_BRIGHTEST) * nits / B2L_BL_MAX_NITS;   /* lines lit */
+	uint32_t emit = (uint32_t)((uint64_t)(B2L_BL_VTOTAL - B2L_BL_AOR_BRIGHTEST) * n16 / B2L_BL_MAX_NITS16);   /* lines lit */
 	uint32_t aor = B2L_BL_VTOTAL - emit;
 	if (aor < B2L_BL_AOR_BRIGHTEST) {
 		aor = B2L_BL_AOR_BRIGHTEST;
@@ -31,16 +33,21 @@ b2l_bl_aor_for_nits(uint32_t nits)
 	return aor;
 }
 
-/* "brightness-nits": nits (<= 2000), 16.16 nits (low 16 bits 0, or > 1 000 000) or millinits. */
 static inline uint32_t
-b2l_bl_nits_from_raw(uint64_t v)
+b2l_bl_aor_for_nits(uint32_t nits)
+{
+	return b2l_bl_aor_for_nits16(nits >= B2L_BL_MAX_NITS ? B2L_BL_MAX_NITS16 : nits << 16);
+}
+
+/* "brightness-nits" from backboardd is 16.16 nits (build 26 log: 11365869 = 173.4 nits, 672751 = 10.3 nits; build 26
+ * read the small ones as millinits, so the bottom of the slider was full brightness). Plain nits (<= 2000) are
+ * kept for hand tests. Result: 16.16 nits, at most 420. */
+static inline uint32_t
+b2l_bl_nits16_from_raw(uint64_t v)
 {
 	if (v <= 2000) {
-		return (uint32_t)v;
+		v <<= 16;
 	}
-	if ((v & 0xffff) == 0 || v > 1000000) {
-		return (uint32_t)(v >> 16);
-	}
-	return (uint32_t)(v / 1000);
+	return v > B2L_BL_MAX_NITS16 ? B2L_BL_MAX_NITS16 : (uint32_t)v;
 }
 #endif

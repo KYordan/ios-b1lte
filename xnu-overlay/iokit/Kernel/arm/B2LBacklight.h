@@ -6,7 +6,7 @@
  * IODisplayParameters/brightness {min, max, value} and BrightnessMilliNits, and writes through
  * IORegistryEntrySetCFProperty (__SetBLDriverProperty, "brightness-nits" among others). Which key and which unit
  * 23G90 really sends is not known yet, so every setProperties is logged ("B2L BL: set ...") and read as:
- *   brightness-nits             nits (<= 2000), 16.16 nits (low 16 bits 0 or > 1 000 000) or millinits
+ *   brightness-nits             16.16 nits (build 26 log: what backboardd sends); plain nits <= 2000 for hand tests
  *   IODisplayParameters/brightness, brightness   value / max of the published range (0..65536)
  *   BrightnessMilliNits         millinits
  *
@@ -20,7 +20,7 @@
  * short write 0x05, longer: DCS long write 0x39, as Samsung's mipi_write), then wait for EMPTY_PH_SFR.
  * Everything written is volatile panel state: a reboot restores it.
  *
- * Boot-args: b2l_backlight=0 (off: no service, nothing sent), b2l_bl_test=0 (no visible dim-and-back at start).
+ * Boot-args: b2l_backlight=0 (off: no service, nothing sent), b2l_bl_test=1 (visible dim-and-back at start).
  * Only on the S10e panel (boot framebuffer 1080x2280); the S10's s6e3ha9 has other tables.
  */
 #ifndef B2L_BACKLIGHT_H
@@ -68,7 +68,8 @@ class AppleARMBacklight : public IOService {
 	volatile uint8_t *fDsim;
 	IOLock           *fLock;
 	thread_call_t     fTest;
-	uint32_t          fNits;
+	uint32_t          fNits16;   /* 16.16 nits */
+	uint32_t          fAor;      /* last AOR sent, 0 = none yet */
 	uint32_t          fSets;
 	uint32_t          fSent, fFailed;
 
@@ -83,7 +84,7 @@ class AppleARMBacklight : public IOService {
 public:
 	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
 	IOReturn setProperties(OSObject *properties) APPLE_KEXT_OVERRIDE;
-	bool setNits(uint32_t nits, const char *why);
+	bool setNits(uint32_t n16, const char *why);   /* 16.16 nits */
 };
 
 OSDefineMetaClassAndStructors(AppleARMBacklight, IOService);
@@ -190,26 +191,33 @@ AppleARMBacklight::dcs(const uint8_t *cmd, uint32_t len)
 }
 
 bool
-AppleARMBacklight::setNits(uint32_t nits, const char *why)
+AppleARMBacklight::setNits(uint32_t n16, const char *why)
 {
-	if (nits > B2L_BL_MAX_NITS) {
-		nits = B2L_BL_MAX_NITS;
+	if (n16 > B2L_BL_MAX_NITS16) {
+		n16 = B2L_BL_MAX_NITS16;
 	}
-	uint32_t aor = b2l_bl_aor_for_nits(nits);
+	uint32_t aor = b2l_bl_aor_for_nits16(n16);
 	static const uint8_t key_on[] = { 0xF0, 0x5A, 0x5A }, key_off[] = { 0xF0, 0xA5, 0xA5 }, latch[] = { 0xF7, 0x03 };
 	const uint8_t aor_cmd[] = { 0xB1, (uint8_t)(aor >> 8), (uint8_t)aor };
 	IOLockLock(fLock);
+	if (aor == fAor) {   /* iOS ramps in small steps; many of them land on the same line count */
+		fNits16 = n16;
+		IOLockUnlock(fLock);
+		return true;
+	}
 	bool ok = dcs(key_on, sizeof(key_on)) && dcs(aor_cmd, sizeof(aor_cmd)) && dcs(latch, sizeof(latch));
 	bool off = dcs(key_off, sizeof(key_off));   /* always tried: the key must not stay open */
 	if (ok) {
-		fNits = nits;
+		fNits16 = n16;
+		fAor = aor;
 	}
 	uint32_t fifo = rd(B2L_DSIM_FIFOCTRL), sent = fSent, failed = fFailed;
 	IOLockUnlock(fLock);
 	static unsigned said;
-	if (said++ < 48 || !ok || !off) {
-		IOLog("B2L BL: %u nits (%s) -> AOR %#06x: %s, key closed %s; packets %u sent %u failed, fifo %08x\n", nits, why,
-		    aor, ok ? "ok" : "FAILED", off ? "ok" : "FAILED", sent, failed, fifo);
+	unsigned n = said++;
+	if (n < 48 || (n & 63) == 0 || !ok || !off) {
+		IOLog("B2L BL: %u.%02u nits (%s) -> AOR %#06x: %s, key closed %s; packets %u sent %u failed, fifo %08x\n",
+		    n16 >> 16, (n16 & 0xffff) * 100 / 65536, why, aor, ok ? "ok" : "FAILED", off ? "ok" : "FAILED", sent, failed, fifo);
 	}
 	if (ok) {
 		publish();
@@ -220,14 +228,14 @@ AppleARMBacklight::setNits(uint32_t nits, const char *why)
 void
 AppleARMBacklight::publish(void)
 {
-	uint32_t nits = fNits;
+	uint32_t n16 = fNits16;
 	OSDictionary *params = OSDictionary::withCapacity(1), *brt = OSDictionary::withCapacity(3), *mn = OSDictionary::withCapacity(3);
 	OSNumber *lo = OSNumber::withNumber(0ULL, 32), *hi = OSNumber::withNumber((unsigned long long)B2L_BL_RANGE, 32);
-	OSNumber *val = OSNumber::withNumber((unsigned long long)nits * B2L_BL_RANGE / B2L_BL_MAX_NITS, 32);
+	OSNumber *val = OSNumber::withNumber((unsigned long long)n16 * B2L_BL_RANGE / B2L_BL_MAX_NITS16, 32);
 	OSNumber *mmin = OSNumber::withNumber(8000ULL, 32), *mmax = OSNumber::withNumber((unsigned long long)B2L_BL_MAX_NITS * 1000, 32);
-	OSNumber *mval = OSNumber::withNumber((unsigned long long)nits * 1000, 32);
-	OSNumber *n16 = OSNumber::withNumber((unsigned long long)nits << 16, 32);
-	if (params && brt && mn && lo && hi && val && mmin && mmax && mval && n16) {
+	OSNumber *mval = OSNumber::withNumber((unsigned long long)n16 * 1000 / 65536, 32);
+	OSNumber *nn = OSNumber::withNumber((unsigned long long)n16, 32);
+	if (params && brt && mn && lo && hi && val && mmin && mmax && mval && nn) {
 		brt->setObject("min", lo);
 		brt->setObject("max", hi);
 		brt->setObject("value", val);
@@ -237,11 +245,11 @@ AppleARMBacklight::publish(void)
 		mn->setObject("value", mval);
 		setProperty("IODisplayParameters", params);
 		setProperty("BrightnessMilliNits", mn);
-		setProperty("brightness-nits", n16);
+		setProperty("brightness-nits", nn);
 	}
 	OSSafeReleaseNULL(params); OSSafeReleaseNULL(brt); OSSafeReleaseNULL(mn);
 	OSSafeReleaseNULL(lo); OSSafeReleaseNULL(hi); OSSafeReleaseNULL(val);
-	OSSafeReleaseNULL(mmin); OSSafeReleaseNULL(mmax); OSSafeReleaseNULL(mval); OSSafeReleaseNULL(n16);
+	OSSafeReleaseNULL(mmin); OSSafeReleaseNULL(mmax); OSSafeReleaseNULL(mval); OSSafeReleaseNULL(nn);
 }
 
 IOReturn
@@ -272,11 +280,11 @@ AppleARMBacklight::setProperties(OSObject *properties)
 			}
 		}
 		if (n != NULL && strcmp(k, "brightness-nits") == 0) {
-			nits = b2l_bl_nits_from_raw(n->unsigned64BitValue());
+			nits = b2l_bl_nits16_from_raw(n->unsigned64BitValue());
 		} else if (n != NULL && strcmp(k, "BrightnessMilliNits") == 0) {
-			nits = (int64_t)(n->unsigned64BitValue() / 1000);
+			nits = (int64_t)(n->unsigned64BitValue() * 65536 / 1000);
 		} else if (n != NULL && strcmp(k, "brightness") == 0) {
-			nits = (int64_t)(n->unsigned64BitValue() * B2L_BL_MAX_NITS / B2L_BL_RANGE);
+			nits = (int64_t)(n->unsigned64BitValue() * B2L_BL_MAX_NITS16 / B2L_BL_RANGE);
 		} else if (d != NULL && strcmp(k, "IODisplayParameters") == 0) {
 			OSObject *b = d->getObject("brightness");
 			OSNumber *bn = OSDynamicCast(OSNumber, b);
@@ -285,7 +293,7 @@ AppleARMBacklight::setProperties(OSObject *properties)
 				bn = OSDynamicCast(OSNumber, bd->getObject("value"));
 			}
 			if (bn != NULL) {
-				nits = (int64_t)(bn->unsigned64BitValue() * B2L_BL_MAX_NITS / B2L_BL_RANGE);
+				nits = (int64_t)(bn->unsigned64BitValue() * B2L_BL_MAX_NITS16 / B2L_BL_RANGE);
 			}
 		}
 	}
@@ -294,12 +302,13 @@ AppleARMBacklight::setProperties(OSObject *properties)
 	if (count < 64 || (count & 63) == 0) {
 		char who[32];
 		proc_selfname(who, sizeof(who));
-		IOLog("B2L BL: set %u from %s:%s -> %lld nits\n", count, who, line, nits);
+		IOLog("B2L BL: set %u from %s:%s -> %lld nits\n", count, who, line, nits < 0 ? nits : nits >> 16);
 	}
 	if (nits < 0) {
 		return kIOReturnSuccess;   /* (unknown keys: accepted, logged, nothing sent) */
 	}
-	return setNits((uint32_t)nits, "iOS") ? kIOReturnSuccess : kIOReturnTimeout;
+	/* (nits: 16.16 from here; values above 420 are clamped by setNits) */
+	return setNits(nits > B2L_BL_MAX_NITS16 ? B2L_BL_MAX_NITS16 : (uint32_t)nits, "iOS") ? kIOReturnSuccess : kIOReturnTimeout;
 }
 
 /* A visible check of the panel path alone, a few seconds into the boot: dim, then back to 300 nits. */
@@ -307,9 +316,9 @@ void
 AppleARMBacklight::testCall(thread_call_param_t p0, thread_call_param_t)
 {
 	AppleARMBacklight *self = (AppleARMBacklight *)p0;
-	self->setNits(40, "start test: dim");
+	self->setNits(40u << 16, "start test: dim");
 	IOSleep(1500);
-	self->setNits(300, "start test: back");
+	self->setNits(300u << 16, "start test: back");
 }
 
 bool
@@ -324,7 +333,7 @@ AppleARMBacklight::start(IOService *provider)
 		IOLog("B2L BL: DSIM0 not mapped: no backlight\n");
 		return false;
 	}
-	fNits = 300;
+	fNits16 = 300u << 16;   /* a guess for publish(): the bootloader's level is unknown; fAor 0 = nothing sent yet */
 	IOLog("B2L BL: DSIM0 version %08x link %08x %08x escmode %08x pkthdr %08x fifo %08x cmd_config %08x\n",
 	    rd(B2L_DSIM_VERSION), rd(B2L_DSIM_LINK_STATUS0), rd(B2L_DSIM_LINK_STATUS1), rd(B2L_DSIM_ESCMODE),
 	    rd(B2L_DSIM_PKTHDR), rd(B2L_DSIM_FIFOCTRL), rd(B2L_DSIM_CMD_CONFIG));
@@ -360,7 +369,7 @@ AppleARMBacklight::start(IOService *provider)
 		registerService();
 		__atomic_store_n(&b2l_backlight_service, this, __ATOMIC_RELEASE);
 	}
-	uint32_t test = 1;
+	uint32_t test = 0;   /* build 27: off by default, the panel path is proven (builds 25, 26) */
 	PE_parse_boot_argn("b2l_bl_test", &test, sizeof(test));
 	if (test) {
 		fTest = thread_call_allocate(&AppleARMBacklight::testCall, this);

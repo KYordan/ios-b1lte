@@ -19,11 +19,21 @@ int main() {
   // half the luminance: about half the lines of the frame lit
   uint32_t half = 2304 - b2l_bl_aor_for_nits(210);
   assert(half >= 1135 && half <= 1146);
-  assert(b2l_bl_nits_from_raw(300) == 300);                // nits
-  assert(b2l_bl_nits_from_raw(300u << 16) == 300);         // 16.16
-  assert(b2l_bl_nits_from_raw(250000) == 250);             // millinits
-  assert(b2l_bl_nits_from_raw(5000000) == 76);             // large: 16.16 (5000000 >> 16)
-  puts("backlight math: AOR range, monotonic, half luminance, nits/16.16/millinits passed");
+  assert(b2l_bl_nits16_from_raw(300) == 300u << 16);       // plain nits
+  assert(b2l_bl_nits16_from_raw(11365869) == 11365869);    // build 26: 173.4 nits
+  assert(b2l_bl_nits16_from_raw(672751) == 672751);        // build 26: 10.3 nits (was misread as 672 millinits->nits)
+  assert(b2l_bl_nits16_from_raw(27525120) == 420u << 16);  // the cap
+  assert(b2l_bl_nits16_from_raw(1ull << 40) == 420u << 16);
+  // 16.16: every iOS step below 420 nits maps monotonically, low end darker than 15 nits
+  uint32_t prev = 0;
+  for (uint64_t raw = 27525120; raw > 2000; raw -= 4099) {
+    uint32_t a = b2l_bl_aor_for_nits16(b2l_bl_nits16_from_raw(raw));
+    assert(a >= prev);
+    prev = a;
+  }
+  assert(b2l_bl_aor_for_nits16(672751) > b2l_bl_aor_for_nits(15));
+  assert(b2l_bl_aor_for_nits16(10u << 16) == b2l_bl_aor_for_nits(10));
+  puts("backlight math: AOR range, monotonic, half luminance, 16.16 nits passed");
 }
 '''
 with tempfile.TemporaryDirectory() as td:
