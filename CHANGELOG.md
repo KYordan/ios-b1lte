@@ -7,6 +7,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Build-by-build history:
 ### Added
 - Galaxy S10e (`beyond0lte`, SM-G970F, 6 GiB) board profile: `B2L_BOARD=beyond0lte` selects its partitions, RAM ceiling, UEFI platform and 1080 × 2280 display ([docs/device-facts-beyond0lte.md](docs/device-facts-beyond0lte.md)).
 - `tools/b1l/board.sh`, shared by the flash tools; `tests/test_board_profiles.py`.
+- Audio through iOS, ported from malthiscode/ios-b1lte 38230ad (S10 B1L-0274..0279): `b2l_audio_seed.h`, a product-id shown to audiomxd only, D94AP root model, real-time floor lowered to 40 us (`osfmk/kern/sched_rt.c`), larger audio ring.
+- Bluetooth through iOS, same commit (S10 B1L-0270..0282): `b2l_bt_seed.h`, `b2l_exec_bluetooth.h`, BlueTool stand-in payload, `com.b2l.bluetooth` control, vendor HCI replies, Skywalk user pipe for A2DP headphones.
 - First public layout of the Galaxy S10 port, imported from `beyond2lte-ios` (branch `b1l`, build B1L-0273).
 - `tools/b1l` (build/flash loop), `tools/flash-kit`, `userspace/audio-plugin`.
 - `docs/architecture.md`, `docs/installation.md`, `docs/troubleshooting.md`, `THIRD_PARTY_NOTICES.md`, `.env.example`.

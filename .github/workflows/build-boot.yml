@@ -45,6 +45,8 @@ on:
       - '!scripts/check-graphics-set.py'
       - '!scripts/ci-fail-annotate.sh'
       - 'tests/**'
+      - 'userspace/audio-plugin/**'   # embedded in the kernel (build-audio-plugin.py)
+      - 'userspace/b2l-bluetool.c'    # embedded in the kernel (build-bluetool-dylib.py)
       - 'tools/b1l/ipsw-launchd.sh'
       - 'tools/b1l/zip-member.py'
       - '.github/workflows/build-boot.yml'
@@ -193,6 +195,20 @@ jobs:
               --dtb "boards/$B2L_BOARD/$B2L_BOARD.dtb"
           fi
           make -s -C "$MU_WORK_TREE/Mu_Basecore/BaseTools/Source/C" -j"$BUILD_JOBS"
+
+      - name: iOS userland the kernel carries (audio plug-in, BlueTool stand-in)
+        # S10e build 28: HakiOS's audio plug-in and b2l-bluetool are built from userspace/ with the iOS 26 SDK (the S10
+        # sets were built with it) and embedded in the kernel, so audio needs no SYSTEM rebuild. Only these two
+        # commands use that Xcode (DEVELOPER_DIR); the kernel build keeps the runner's default. If BlueTool fails to
+        # build, the committed b2l_bluetool_payload.h (malthiscode/ios-b1lte 38230ad, same source) is kept.
+        run: |
+          x=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          [ -n "$x" ] && export DEVELOPER_DIR="$x/Contents/Developer"
+          echo "::notice title=iOS userland SDK::$(xcrun --sdk iphoneos --show-sdk-version) ($x)"
+          python3 scripts/build-audio-plugin.py --output xnu-overlay/bsd/kern/b2l_audio_plugin_payload.h
+          python3 scripts/build-bluetool-dylib.py --output out/b2l_bluetool_payload.h \
+            && cp out/b2l_bluetool_payload.h xnu-overlay/bsd/kern/b2l_bluetool_payload.h \
+            || echo "::warning title=BlueTool::not rebuilt; the committed payload is used"
 
       - name: XNU source (pinned, patched, overlay)
         env:

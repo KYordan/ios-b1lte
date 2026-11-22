@@ -17,6 +17,8 @@ on:
     branches: [beyond0lte]
     paths:
       - 'userspace/**'
+      - '!userspace/audio-plugin/**'   # kernel-embedded (build-boot.yml), not a GPU set
+      - '!userspace/b2l-bluetool.c'
       - 'scripts/build-mesa.sh'
       - 'scripts/build-metal.sh'
       - 'scripts/build-metal-scion.sh'

@@ -2791,6 +2791,35 @@ b2l_iokit_trace_match(const char *what, OSDictionary *dict, bool found)
 	}
 	OSSafeReleaseNULL(s);
 }
+/* S10e build 28, from malthiscode/ios-b1lte (S10 B1L-0277, audio): /product product-id (D94's, B2LPlatformExpert) is
+ * what MGGetProductType() matches; audiomxd's VirtualAudio needs it (ProductID 43), but backboardd aborts with it
+ * (CoreAnimation wants the D94's SILManager). With b2l_product_id=2 (default) only audiomxd reads it by name; everyone
+ * else gets "not found". The whole-dictionary reads (get_properties*) still list it; fine while MG asks by name. */
+static bool
+b2l_hide_product_id(IORegistryEntry *entry, const char *name)
+{
+	static int mode = -1;
+	if (strcmp(name, "product-id") != 0) {
+		return false;
+	}
+	if (mode < 0) {
+		int v = 2;
+		PE_parse_boot_argn("b2l_product_id", &v, sizeof(v));
+		mode = v;
+	}
+	if (mode != 2) {
+		return false;
+	}
+	IORegistryEntry *product = IORegistryEntry::fromPath("/product", gIODTPlane);
+	bool is_product = product == entry;
+	OSSafeReleaseNULL(product);
+	if (!is_product) {
+		return false;
+	}
+	char who[32];
+	proc_selfname(who, sizeof(who));
+	return strcmp(who, "audiomxd") != 0;
+}
 #endif /* B2L */
 
 static kern_return_t
@@ -3791,6 +3820,12 @@ is_io_registry_entry_get_property_bytes(
 	}
 #endif
 
+#if defined(B2L)
+	if (b2l_hide_product_id(entry, property_name)) {
+		return kIOReturnNotFound;
+	}
+#endif
+
 	obj = IOCopyPropertyCompatible(entry, property_name);
 	if (!obj) {
 		return kIOReturnNoResources;
@@ -3859,6 +3894,12 @@ is_io_registry_entry_get_property(
 	}
 #endif
 
+#if defined(B2L)
+	if (b2l_hide_product_id(entry, property_name)) {
+		return kIOReturnNotFound;
+	}
+#endif
+
 	obj = IOCopyPropertyCompatible(entry, property_name);
 	if (!obj) {
 		return kIOReturnNotFound;
@@ -3903,6 +3944,12 @@ is_io_registry_entry_get_property_recursively(
 #if CONFIG_MACF
 	if (0 != mac_iokit_check_get_property(kauth_cred_get(), entry, property_name)) {
 		return kIOReturnNotPermitted;
+	}
+#endif
+
+#if defined(B2L)
+	if (b2l_hide_product_id(entry, property_name)) {
+		return kIOReturnNotFound;
 	}
 #endif
 
@@ -4093,6 +4140,12 @@ is_io_registry_entry_get_property_bin_buf(
 #if CONFIG_MACF
 	if (0 != mac_iokit_check_get_property(kauth_cred_get(), entry, property_name)) {
 		return kIOReturnNotPermitted;
+	}
+#endif
+
+#if defined(B2L)
+	if (b2l_hide_product_id(entry, property_name)) {
+		return kIOReturnNotFound;
 	}
 #endif
 
