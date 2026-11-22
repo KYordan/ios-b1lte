@@ -50,11 +50,14 @@ export PATH=$B/venv/bin:$HOME/Developer/tools/mamba/envs/s10/bin:$PATH
 # B1L-0076: -fno-ptrauth-calls as well. This kernel's arm64e emulation is the stripped-pointer ABI (b2l_arm64e_compat.c):
 # pac* leaves a pointer as it is and aut*/blraa* accept an unsigned one, so unsigned function pointers crossing into
 # the system (callbacks) and signed ones coming out of it (dlsym) are the same thing here.
+# CI (flex 2.7.3, iOS SDK 26.2): the scanner flex generates from program_lexer.l reached u_endian.h's
+# "UTIL_ARCH_LITTLE_ENDIAN and/or UTIL_ARCH_BIG_ENDIAN were unset". arm64 is little-endian: said once for every file.
+ENDIAN="'-DUTIL_ARCH_LITTLE_ENDIAN=1', '-DUTIL_ARCH_BIG_ENDIAN=0'"
 cat > cross.ini.new <<INI
 [binaries]
-c = ['$CC', '-target', '$TARGET', '-isysroot', '$SDK', '-fno-ptrauth-returns', '-fno-ptrauth-calls']
-cpp = ['$CXX', '-target', '$TARGET', '-isysroot', '$SDK', '-fuse-cxa-atexit', '-fno-ptrauth-returns', '-fno-ptrauth-calls']
-objc = ['$CC', '-target', '$TARGET', '-isysroot', '$SDK', '-fno-ptrauth-returns', '-fno-ptrauth-calls']
+c = ['$CC', '-target', '$TARGET', '-isysroot', '$SDK', '-fno-ptrauth-returns', '-fno-ptrauth-calls', $ENDIAN]
+cpp = ['$CXX', '-target', '$TARGET', '-isysroot', '$SDK', '-fuse-cxa-atexit', '-fno-ptrauth-returns', '-fno-ptrauth-calls', $ENDIAN]
+objc = ['$CC', '-target', '$TARGET', '-isysroot', '$SDK', '-fno-ptrauth-returns', '-fno-ptrauth-calls', $ENDIAN]
 ar = '$(xcrun -f ar)'
 ranlib = '$(xcrun -f ranlib)'
 strip = '$(xcrun -f strip)'
