@@ -1,6 +1,7 @@
 # Plan: Metal (GPU) on the Galaxy S10e
 
-Agreed 2026-11-22, to start once power off and the battery (build 13) are settled. The S10's history is in
+Agreed 2026-11-22. Its precondition is met: power off, battery and display sleep work since build 17, so this is
+the next large step (after the small storage-size fix). The S10's history is in
 [docs/gpu/metal-progress.md](../gpu/metal-progress.md); the S10's speed plan in [speed-and-m6.md](speed-and-m6.md).
 
 ## Where the S10e stands (boot 12 log)

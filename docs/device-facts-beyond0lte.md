@@ -188,10 +188,14 @@ Build numbers are GitHub Actions runs of `build-boot.yml`; only `boot.img` (`sda
 | 13 | UEFI maps the APM SRAM and mailbox (GCD MMIO, uncached) and shows both ACPM results for 3 s before `PS_HOLD`; battery pins `gpm12-0`/`gpm13-0` set to function 2, no pull (DT `hsi2c45-bus`) | **Battery works: 56 % in Settings and the status bar.** Menu power off: `wtsr -14, acpm -14`, then a restart: the GCD describes the APM ranges only in part, so nothing was sent |
 | 14 | `Mapped()` walks the range descriptor by descriptor and adds only the absent pieces | superseded by 16 |
 | 15 | Charger state decoded as Samsung's `max77705_charger.c` (`CHGIN_DTLS` too; `CHG_DTLS` 3-4 full); battery log only on changes, 10 s poll | superseded by 16 |
-| 16 | Display sleep: IOMobileFramebuffer selector 12 (`kern_RequestPowerChange`, one scalar, 0 = off) implemented: panel black while off, swaps not shown until on. Selector 79 is `IOMobileFramebufferGetBlock` (block 0x40, 44 bytes), a read only | not tested yet |
+| 16 | Display sleep: IOMobileFramebuffer selector 12 (`kern_RequestPowerChange`, one scalar, 0 = off) implemented: panel black while off, swaps not shown until on. Selector 79 is `IOMobileFramebufferGetBlock` (block 0x40, 44 bytes), a read only | **Charging shown on USB** (about 4 W, no fast-charge negotiation). Display off panicked: "Unaligned kernel data abort" in `bzero` (esr 0x96000061, x2 = 4320 × 2280): `DC ZVA` is not allowed on the write-combined panel mapping |
+| 17 | Panel cleared with plain 64-bit stores | **Display sleep works** (power button and auto-lock). **Menu power off works** (`wtsr 0, acpm 0`, the phone switches off) |
 
-Seen on boot 8–11, still open: the power button dims and freezes the picture instead of turning the display off
-(backboardd calls IOMobileFramebuffer selector 79 with 0x40, answered *unsupported*); *Settings → General → About*
+Status after build 17: power off from iOS and the menu, battery level and charging, display sleep and full-screen
+iOS all work. The phone draws about 1 A with the screen on (CPU composition, no CPU idle states): expect 2.5–3 h from
+a full battery until Metal takes the drawing off the CPU.
+
+Seen on boot 8–11, still open: ~~the power button dims and freezes the picture~~ (fixed in build 17); *Settings → General → About*
 shows *Capacity: Zero KB* (no IOMedia for the UFS disk) with the right *Available*; widgets stay at "Waiting…";
 app-switcher snapshots are black; the GL/Metal userland is not on the S10e SYSTEM image (`B2L GL: publication error=2`).
 

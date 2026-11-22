@@ -6,7 +6,7 @@ Apple's open-source XNU kernel running on a Galaxy S10e and booting the **unmodi
 
 This branch is the S10e port. It shares the kernel, drivers and loader with the Galaxy S10 port on [`main`](https://github.com/KYordan/ios-b1lte/tree/main) (`beyond1lte`, SM-G973F) and adds the S10e board profile, its 6 GB memory map, the 1080 × 2280 display, a Linux/WSL image pipeline and a GitHub Actions build, so **no Mac is needed**.
 
-**Today (November 2026):** the S10e boots to the iOS 26 lock screen and home screen, full screen, with touch and Wi-Fi. Settings, Control Center, Photos and the App Library open. Power off, battery level, display sleep and storage size are being worked on.
+**Today (November 2026):** the S10e boots to the iOS 26 lock screen and home screen, full screen, with touch and Wi-Fi. Settings, Control Center, Photos and the App Library open. Power off (iOS and boot menu), battery level and charging, and display sleep work. Next: storage size, then [Metal on the GPU](docs/plans/s10e-metal.md).
 
 > [!WARNING]
 > Experimental research project, not a product. Apple's security policies (AMFI, code signing, Secure Enclave) are relaxed for hardware bring-up. Installing iOS **erases Android** (`system` and `userdata` are overwritten), and a wrong partition write can brick the phone. Back up first (see [Installing](#installing)).
