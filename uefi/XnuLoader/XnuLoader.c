@@ -379,7 +379,11 @@ STATIC EFI_STATUS B2lBootXnu(EFI_HANDLE ImageHandle)
     AsciiStrCpyS(Args->command_line, sizeof(Args->command_line),
                 "-v debug=0x14e serial=3 cpus=8 keepsyms=1 -enable_kprintf_spam "
                 "rd=b2l-userdata b2l_root_rw=1 b2l_unsealed_root=1 b2l_arm64e_compat=1 b2l_pacga_siphash=1 b2l_pacga_pair=1 cs_enforcement_disable=1 "
-                "launchd_unsecure_cache=1 b2l_system_log=1 b2l_native_cache=1 b2l_diag=1 b2l_userspace_bootstrap=1 exception_log_max_pid=4096"
+                "launchd_unsecure_cache=1 b2l_system_log=1 b2l_native_cache=1 b2l_diag=1 b2l_userspace_bootstrap=1 exception_log_max_pid=4096 "
+                /* S10e build 18 panicked "Interrupts held disabled timed out: 523 us >= 461 us": the iPhoneOS limit is
+                 * 12000 ticks (500 us at Apple's 24 MHz, 461 us at the Exynos 26 MHz), tuned for Apple CPUs at full
+                 * clock; with the load limit (B2LCPU.cpp) ordinary sections run at 0.44-0.52 GHz. 1 = trace, no panic. */
+                "interrupt-masked-debug-mode=1"
                 B2L_FB_LOGICAL_ARGS);
     Entry = Base + Mach.entry - Mach.virtual_base;
     if(Kernel){FreePool(Kernel); Kernel = NULL;}
