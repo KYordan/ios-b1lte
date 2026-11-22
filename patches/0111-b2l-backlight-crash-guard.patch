@@ -1,0 +1,26 @@
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -2033,6 +2033,13 @@
+ }
+ 
+ #if defined(ARM64_BOARD_CONFIG_B2L)
++/* S10e build 26 (B2LBacklight.h): CoreBrightness, in backboardd, reads the backlight service; a property it cannot use
++ * crashed it three times in build 25 and launchd rebooted the phone ("critical process crashes: backboardd"). A
++ * backboardd crash while the service is published removes the service, so the next backboardd starts without it. */
++extern void b2l_backlight_client_crashed(const char *who);
++#endif
++
++#if defined(ARM64_BOARD_CONFIG_B2L)
+ /* Existing diagnostic boot parameter, bounded per process class. Keep this
+  * separate from the 96-byte system-event payload and the first-eight-exits
+  * sample budget. backtrace_user is already used below for crash processing. */
+@@ -2108,6 +2115,9 @@
+ 	task_t task = proc_task(p);
+ 
+ #if defined(ARM64_BOARD_CONFIG_B2L)
++	if (p == current_proc() && ut->uu_exception && !strncmp(p->p_comm, "backboardd", 10)) {
++		b2l_backlight_client_crashed(p->p_comm);
++	}
+ 	b2l_trace_crash(p, rv, ut);
+ #endif
+ 

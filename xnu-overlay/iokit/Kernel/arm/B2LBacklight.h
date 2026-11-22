@@ -88,6 +88,45 @@ public:
 
 OSDefineMetaClassAndStructors(AppleARMBacklight, IOService);
 
+/* S10e build 26: the published service, for the crash guard below (patch 0111, kern_exit.c proc_prepareexit). */
+static AppleARMBacklight * volatile b2l_backlight_service;
+
+extern "C" void
+b2l_backlight_client_crashed(const char *who)
+{
+	AppleARMBacklight *bl = __atomic_exchange_n(&b2l_backlight_service, (AppleARMBacklight *)NULL, __ATOMIC_ACQ_REL);
+	if (bl == NULL) {
+		return;
+	}
+	/* build 25: CoreBrightness crashed in backboardd on what this service offered, and launchd rebooted after three */
+	IOLog("B2L BL: %s crashed with the backlight service published: removing the service\n", who);
+	bl->terminate();
+}
+
+/* S10e build 26: what CoreBrightness (23G90) reads from the backlight before it builds its brightness curve, found in
+ * its code: -[... getBacklightCalibration:] = [[self reader] copyProperty:@"backlight-calibration-parameters"], a
+ * dictionary whose values are IOFixed (16.16, read as integerValue / 65536): current-for-max-backlight,
+ * current-for-mid-backlight, hardware-max-current-limit, lMax/lMid/lMinProduct, lMax/lMid/lMinPanel (and an optional
+ * milliAmps2NitsScaleFactor). Without it build 25's backboardd took a fallback that converts a brightness through the
+ * not-yet-built curve: a NULL load at CoreBrightness+0x169924. -[... copyMarketingTable] = loadIOFixedArray of
+ * "backlight-marketing-table": IOFixed nits per step, here Samsung's own 74 S6E3FA7 beyond0 levels (lum_tbl). The
+ * currents are plausible OLED values, not measured. */
+static const uint16_t b2l_bl_marketing_nits[74] = {
+	2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 22, 24, 25, 27, 29, 30, 32, 34, 37, 39, 41,
+	44, 47, 50, 53, 56, 60, 64, 68, 72, 77, 82, 87, 93, 98, 105, 111, 119, 126, 134, 143, 152, 162, 172, 183, 195, 207,
+	220, 234, 249, 265, 282, 300, 316, 333, 350, 357, 365, 372, 380, 387, 395, 403, 412, 420,
+};
+
+static void
+b2l_bl_set_fixed(OSDictionary *d, const char *key, uint32_t whole)
+{
+	OSNumber *n = OSNumber::withNumber((unsigned long long)whole << 16, 32);
+	if (n != NULL) {
+		d->setObject(key, n);
+		n->release();
+	}
+}
+
 bool
 AppleARMBacklight::waitClear(uint32_t bit, uint32_t us)
 {
@@ -289,11 +328,38 @@ AppleARMBacklight::start(IOService *provider)
 	IOLog("B2L BL: DSIM0 version %08x link %08x %08x escmode %08x pkthdr %08x fifo %08x cmd_config %08x\n",
 	    rd(B2L_DSIM_VERSION), rd(B2L_DSIM_LINK_STATUS0), rd(B2L_DSIM_LINK_STATUS1), rd(B2L_DSIM_ESCMODE),
 	    rd(B2L_DSIM_PKTHDR), rd(B2L_DSIM_FIFOCTRL), rd(B2L_DSIM_CMD_CONFIG));
-	setProperty("backlight-control", kOSBooleanTrue);
 	setProperty("built-in", kOSBooleanTrue);
 	setProperty("B2L Panel", "s6e3fa7_beyond0 (AOR only)");
+	{
+		OSDictionary *cal = OSDictionary::withCapacity(9);
+		if (cal != NULL) {
+			b2l_bl_set_fixed(cal, "current-for-max-backlight", 20);
+			b2l_bl_set_fixed(cal, "current-for-mid-backlight", 7);
+			b2l_bl_set_fixed(cal, "hardware-max-current-limit", 25);
+			b2l_bl_set_fixed(cal, "lMaxProduct", B2L_BL_MAX_NITS);
+			b2l_bl_set_fixed(cal, "lMidProduct", 140);
+			b2l_bl_set_fixed(cal, "lMinProduct", 2);
+			b2l_bl_set_fixed(cal, "lMaxPanel", B2L_BL_MAX_NITS);
+			b2l_bl_set_fixed(cal, "lMidPanel", 140);
+			b2l_bl_set_fixed(cal, "lMinPanel", 2);
+			setProperty("backlight-calibration-parameters", cal);
+			cal->release();
+		}
+		uint32_t table[74];
+		for (unsigned i = 0; i < 74; i++) {
+			table[i] = (uint32_t)b2l_bl_marketing_nits[i] << 16;
+		}
+		setProperty("backlight-marketing-table", table, sizeof(table));
+	}
 	publish();
-	registerService();
+	uint32_t ios = 1;
+	PE_parse_boot_argn("b2l_bl_ios", &ios, sizeof(ios));
+	if (ios) {
+		/* "backlight-control" last: it is what CoreBrightness and others match on (IOPropertyMatch) */
+		setProperty("backlight-control", kOSBooleanTrue);
+		registerService();
+		__atomic_store_n(&b2l_backlight_service, this, __ATOMIC_RELEASE);
+	}
 	uint32_t test = 1;
 	PE_parse_boot_argn("b2l_bl_test", &test, sizeof(test));
 	if (test) {
@@ -304,7 +370,9 @@ AppleARMBacklight::start(IOService *provider)
 			thread_call_enter_delayed(fTest, deadline);
 		}
 	}
-	IOLog("B2L BL: AppleARMBacklight published (backlight-control), start test %s\n", test ? "in 6 s" : "off");
+	IOLog("B2L BL: AppleARMBacklight %s, start test %s\n",
+	    ios ? "published (backlight-control, calibration, 74-step marketing table)" : "not published (b2l_bl_ios=0)",
+	    test ? "in 6 s" : "off");
 	return true;
 }
 
