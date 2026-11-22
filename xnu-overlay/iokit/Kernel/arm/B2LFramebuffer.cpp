@@ -190,7 +190,12 @@ AppleCLCD::start(IOService *provider)
 	}
 	/* B1L-0097: backboardd drew into the panel memory itself when given it as the default surface -- every element seen
 	 * appearing one after the other. It gets ordinary memory of the same shape, shown like any other surface. */
-	fClientSurface = fSurface != NULL ? b2l_surface_create_memory(fLogicalW, fLogicalH, fRowBytes, B2L_FB_FORMAT_BGRA,
+	/* S10e build 21 (Metal): scaled, its rows were the panel's 4320 bytes, not a multiple of 64, which the Mali needs
+	 * to draw into it. hakiosmetal refused the import ("surface 2 880x1912 ... 4320 bytes a row -> refused"), drew into
+	 * a private texture and never wrote it back: every other frame backboardd showed was this surface, black. Scaled,
+	 * nothing shows it in place (the copy takes any pitch), so its rows are its own width rounded up to 64 bytes. */
+	uint32_t clientRowBytes = fScaled ? ((fLogicalW * 4u + 63u) & ~63u) : fRowBytes;
+	fClientSurface = fSurface != NULL ? b2l_surface_create_memory(fLogicalW, fLogicalH, clientRowBytes, B2L_FB_FORMAT_BGRA,
 	    b2l_zc_active()) : NULL;
 	IOLog("B2L FB: default surface for clients: %s (id %u, scan-out %#llx)\n",
 	    fClientSurface != NULL ? "its own memory" : "the panel memory",
