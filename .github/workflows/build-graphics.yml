@@ -23,6 +23,7 @@ on:
       - 'scripts/build-gl.sh'
       - 'scripts/unsign-branches.py'
       - 'scripts/check-graphics-set.py'
+      - 'scripts/ci-fail-annotate.sh'
       - 'xnu-overlay/bsd/kern/b2l_userspace_seed.h'
       - '.github/workflows/build-graphics.yml'
 
@@ -46,6 +47,11 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Python 3.12 (Mesa's meson scripts; the runner's default python3 is newer than Mesa 25.0.7 knows)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Toolchain
         run: |
@@ -71,17 +77,33 @@ jobs:
 
       - name: Mesa 25.0.7 (panfrost, libOSMesa, libhakiosair)
         run: |
-          bison --version | head -1; flex --version
-          bash scripts/build-mesa.sh || { tail -n 80 "$MESA_BUILD/meson-setup.log" "$MESA_BUILD/ninja.log" 2>/dev/null; exit 1; }
+          bison --version | head -1; flex --version; python3 --version; meson --version
+          mkdir -p out/logs
+          bash scripts/build-mesa.sh > out/logs/mesa-step.log 2>&1 || {
+            cat out/logs/mesa-step.log
+            tail -n 80 "$MESA_BUILD/meson-setup.log" "$MESA_BUILD/ninja.log" 2>/dev/null
+            bash scripts/ci-fail-annotate.sh "Mesa" out/logs/mesa-step.log "$MESA_BUILD/meson-setup.log" \
+              "$MESA_BUILD/build-softpipe-panfrost/meson-logs/meson-log.txt" "$MESA_BUILD/ninja.log"
+            exit 1; }
+          cat out/logs/mesa-step.log
 
       - name: b2l-metal-v5 (B2LMetalV3, CPU-renderer plug-in)
-        run: V=b2l-metal-v5 BUNDLE=B2LMetalV3 bash scripts/build-metal.sh
+        run: |
+          V=b2l-metal-v5 BUNDLE=B2LMetalV3 bash scripts/build-metal.sh > out/logs/metal-v5.log 2>&1 \
+            || { cat out/logs/metal-v5.log; bash scripts/ci-fail-annotate.sh "b2l-metal-v5" out/logs/metal-v5.log; exit 1; }
+          cat out/logs/metal-v5.log
 
       - name: b2l-metal-v95 (Scion Mali driver, B2LMetalv95 plug-in)
-        run: V=b2l-metal-v95 bash scripts/build-metal-scion.sh
+        run: |
+          V=b2l-metal-v95 bash scripts/build-metal-scion.sh > out/logs/metal-v95.log 2>&1 \
+            || { cat out/logs/metal-v95.log; bash scripts/ci-fail-annotate.sh "b2l-metal-v95" out/logs/metal-v95.log; exit 1; }
+          cat out/logs/metal-v95.log
 
       - name: b2l-gl-v9 (EAGL bridge)
-        run: V=b2l-gl-v9 bash scripts/build-gl.sh
+        run: |
+          V=b2l-gl-v9 bash scripts/build-gl.sh > out/logs/gl-v9.log 2>&1 \
+            || { cat out/logs/gl-v9.log; bash scripts/ci-fail-annotate.sh "b2l-gl-v9" out/logs/gl-v9.log; exit 1; }
+          cat out/logs/gl-v9.log
 
       - name: Collect and check against the kernel's file list
         run: |

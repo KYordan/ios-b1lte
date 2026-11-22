@@ -37,6 +37,13 @@ on:
       - 'common/**'
       - 'boards/**'
       - 'scripts/**'
+      # GPU userland scripts: build-graphics.yml, not the kernel
+      - '!scripts/build-mesa.sh'
+      - '!scripts/build-metal.sh'
+      - '!scripts/build-metal-scion.sh'
+      - '!scripts/build-gl.sh'
+      - '!scripts/check-graphics-set.py'
+      - '!scripts/ci-fail-annotate.sh'
       - 'tests/**'
       - 'tools/b1l/ipsw-launchd.sh'
       - 'tools/b1l/zip-member.py'
