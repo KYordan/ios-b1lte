@@ -13,6 +13,7 @@
 #include <libkern/c++/OSData.h>
 #include <pexpert/pexpert.h>
 #include "B2LBattery.h"
+#include "B2LBacklight.h"
 
 class B2LPlatformExpert : public IODTPlatformExpert {
 	OSDeclareDefaultStructors(B2LPlatformExpert);
@@ -152,6 +153,8 @@ B2LPlatformExpert::start(IOService *provider)
 		}
 		OSSafeReleaseNULL(bat);
 	}
+	/* S10e build 25: display brightness (B2LBacklight.h). Kill switch: boot-arg b2l_backlight=0. */
+	b2l_backlight_start(this);
 	IOLog("B2L: platform expert registered; software product iPhone17,2, Samsung B2L hardware\n");
 	return true;
 }
