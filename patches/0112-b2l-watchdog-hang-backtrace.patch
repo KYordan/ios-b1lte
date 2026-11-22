@@ -1,0 +1,55 @@
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -2054,6 +2054,44 @@
+ 	b2l_early_trace("B2L FAULTMSG: pid=%d %s=%.255s\n", pid, label, text);
+ }
+ 
++/* S10e build 29: an app killed by SpringBoard/RunningBoard for hanging (exit reason namespace 10 or 15, typically
++ * 0x8badf00d: Settings panes such as Date & Time in build 27) leaves no crash: log where it was stuck. The killing
++ * SIGKILL is taken by the first thread that does not block it, usually the main thread, and the other threads are
++ * held (sig_lock_to_exit) before proc_prepareexit, so this thread's own user stack is where it waited.
++ * Any process, 6 per boot, 24 frames; boot-arg b2l_hang_bt=0 turns it off. */
++static void
++b2l_trace_hang(proc_t p, struct uthread *ut)
++{
++	static unsigned samples;
++	static int enabled = -1;
++	if (enabled < 0) {
++		int v = 1;
++		PE_parse_boot_argn("b2l_hang_bt", &v, sizeof(v));
++		enabled = v;
++	}
++	os_reason_t r = p->p_exit_reason;
++	if (!enabled || p != current_proc() || r == OS_REASON_NULL ||
++	    (r->osr_namespace != OS_REASON_SPRINGBOARD && r->osr_namespace != OS_REASON_RUNNINGBOARD) ||
++	    __atomic_fetch_add(&samples, 1, __ATOMIC_RELAXED) >= 6) return;
++	const char *desc = exit_reason_get_string_desc(r);
++	bool main_thread = TAILQ_FIRST(&p->p_uthlist) == ut;
++	b2l_early_trace("B2L HANG: %s[%d] ns=%u code=0x%llx thread=%llu%s desc=%.200s\n",
++	    p->p_comm, proc_getpid(p), r->osr_namespace, r->osr_code, thread_tid(current_thread()),
++	    main_thread ? " (main)" : " (not main)", desc ? desc : "none");
++	arm_saved_state_t *state = get_user_regs(current_thread());
++	if (state && is_saved_state64(state)) {
++		b2l_early_trace("B2L HANG: pid=%d pc=0x%llx lr=0x%llx sp=0x%llx x16=0x%llx\n", proc_getpid(p),
++		    (uint64_t)get_saved_state_pc(state), (uint64_t)get_saved_state_lr(state),
++		    (uint64_t)get_saved_state_sp(state), (uint64_t)get_saved_state_reg(state, 16));
++	}
++	uintptr_t bt[24];
++	struct backtrace_user_info info = BTUINFO_INIT;
++	unsigned frames = backtrace_user(bt, 24, NULL, &info);
++	b2l_early_trace("B2L HANG BT: pid=%d frames=%u error=%d\n", proc_getpid(p), frames, info.btui_error);
++	for (unsigned i = 0; i < frames && i < 24; i++)
++		b2l_early_trace("B2L HANG BT: pid=%d frame=%u pc=0x%llx\n", proc_getpid(p), i, (uint64_t)bt[i]);
++}
++
+ static void
+ b2l_trace_crash(proc_t p, int rv, struct uthread *ut)
+ {
+@@ -2119,6 +2157,7 @@
+ 		b2l_backlight_client_crashed(p->p_comm);
+ 	}
+ 	b2l_trace_crash(p, rv, ut);
++	b2l_trace_hang(p, ut);
+ #endif
+ 
+ #if defined(ARM64_BOARD_CONFIG_B2L)
