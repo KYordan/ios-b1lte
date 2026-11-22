@@ -552,7 +552,11 @@ static void b2l_thermal_thread(void *, wait_result_t)
     static const unsigned zone_of[4] = { B2L_ZONE_LITTLE, B2L_ZONE_MID, B2L_ZONE_BIG, B2L_ZONE_G3D };
     static const char *const name[4] = { "cl0 A55", "cl1 A75", "cl2 M4", "g3d" };
     static const uint32_t floor_khz[4] = { 1000000, 1000000, 1000000, 400000 };
-    int hi = 65, lo = 60, crit = 72;
+    /* S10e build 24: was 65/60/72. Under load the clusters sit at 66-68 C: one touch of 72 dropped every cluster to
+     * its floor (M4 936 MHz while 100 % busy) and nothing came back, since a level returns only at <= lo. Samsung's
+     * own 9820 kernel starts slowing the clusters in the mid 70s. Old behaviour: b2l_thr_hi=65 b2l_thr_lo=60
+     * b2l_thr_crit=72. */
+    int hi = 75, lo = 70, crit = 85;
     PE_parse_boot_argn("b2l_thr_hi", &hi, sizeof(hi));
     PE_parse_boot_argn("b2l_thr_lo", &lo, sizeof(lo));
     PE_parse_boot_argn("b2l_thr_crit", &crit, sizeof(crit));

@@ -31,8 +31,21 @@ static void run(uint32_t dw, uint32_t dh, uint32_t lw, uint32_t lh,
     memcpy(&ref[(size_t)py * ds + px * 4], &src[soff + (size_t)(sy + ly - dy) * ss + (sx + lx - dx) * 4], 4);
   }
   assert(dst == ref);
+  // S10e build 24: the scratch path (row read once, column table, no panel read-back) gives the same pixels,
+  // and a scratch buffer one word short falls back to the path above.
+  uint64_t words = (uint64_t)w + 2ull * (px1 - px0);
+  for (uint64_t have : {words, words - 1, words + 7}) {
+    std::vector<uint8_t> d2((size_t)ds * dh, 0xAB);
+    std::vector<uint32_t> scratch((size_t)have + 1, 0xdeadbeef);
+    assert(b2l_blit_scaled_scratch(d2.data(), d2.size(), dw, dh, ds, src.data(), src.size(), sw, sh, ss, soff,
+                                   lw, lh, sx, sy, dx, dy, w, h, scratch.data(), have));
+    assert(d2 == ref);
+    assert(scratch[(size_t)have] == 0xdeadbeef);   // nothing written past the words it was given
+  }
 }
 int main() {
+  run(1080, 2280, 880, 1912, 0, 0, 0, 0, 880, 1912);    // S10e full frame
+  run(1080, 2280, 880, 1912, 7, 9, 40, 600, 500, 300);  // S10e partial layer
   run(1440, 3040, 880, 1912, 0, 0, 0, 0, 880, 1912);    // B1L full frame
   run(1440, 3040, 960, 2026, 0, 0, 0, 0, 960, 2026);    // 2/3 alternative
   run(1440, 3040, 880, 1912, 3, 5, 100, 200, 300, 400); // partial layer

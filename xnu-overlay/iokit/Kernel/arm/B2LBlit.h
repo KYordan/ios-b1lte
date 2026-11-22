@@ -32,9 +32,10 @@ static inline int b2l_blit(void *dst,uint64_t dbytes,uint32_t dw,uint32_t dh,uin
 /* Logical canvas lw x lh presented on the dw x dh panel (nearest neighbour).
  * Rectangles are in logical coordinates; the same bounds rules as b2l_blit
  * apply to the real source and panel allocations. */
-static inline int b2l_blit_scaled(void *dst,uint64_t dbytes,uint32_t dw,uint32_t dh,uint32_t ds,
+static inline int b2l_blit_scaled_scratch(void *dst,uint64_t dbytes,uint32_t dw,uint32_t dh,uint32_t ds,
     const void *src,uint64_t sbytes,uint32_t sw,uint32_t sh,uint32_t ss,uint32_t soff,
-    uint32_t lw,uint32_t lh,int32_t sx,int32_t sy,int32_t dx,int32_t dy,int32_t width,int32_t height)
+    uint32_t lw,uint32_t lh,int32_t sx,int32_t sy,int32_t dx,int32_t dy,int32_t width,int32_t height,
+    uint32_t *scratch,uint64_t scratch_words)
 {
     if(!dst||!src||!dw||!dh||!sw||!sh||!lw||!lh||dw>16384||dh>16384||sw>16384||sh>16384||
        lw>dw||lh>dh||ds<dw*4||ss<sw*4||ds>65536||ss>65536||sx<0||sy<0||dx<0||dy<0||
@@ -55,6 +56,35 @@ static inline int b2l_blit_scaled(void *dst,uint64_t dbytes,uint32_t dw,uint32_t
     if(((uint64_t)py1-1)*ds+(uint64_t)px1*4>dbytes)return 0;
     const uint8_t *base=(const uint8_t*)src+soff;
     uint32_t previous=UINT32_MAX;
+    uint32_t n=px1-px0;
+    if(scratch&&scratch_words>=(uint64_t)w+2ull*n){
+        /* S10e build 24: the source (backboardd's surfaces) and the panel are both write-combined, i.e. uncached.
+         * A pixel-at-a-time read of either is one bus transaction per 4 bytes, and the old repeated-row path read
+         * the panel back (~1.6 MB a frame on 880x1912 -> 1080x2280). Here each needed source row is read once with
+         * memcpy (wide loads) into cached scratch, scaled there through a column table, and written out with
+         * memcpy; a repeated panel row is written again from the scaled copy. Same pixels as the path below.
+         * scratch: xmap[n] | inrow[w] | outrow[n]. */
+        uint32_t *xmap=scratch,*inrow=scratch+n,*outrow=scratch+n+w;
+        for(uint32_t i=0;i<n;++i){
+            uint32_t lx=(uint32_t)((uint64_t)(px0+i)*lw/dw);
+            if(lx<(uint32_t)dx)lx=(uint32_t)dx;
+            if(lx>(uint32_t)dx+w-1)lx=(uint32_t)dx+w-1;
+            xmap[i]=lx-(uint32_t)dx;
+        }
+        for(uint32_t py=py0;py<py1;++py){
+            uint32_t ly=(uint32_t)((uint64_t)py*lh/dh);
+            if(ly<(uint32_t)dy)ly=(uint32_t)dy;
+            if(ly>(uint32_t)dy+h-1)ly=(uint32_t)dy+h-1;
+            uint32_t row=(uint32_t)sy+ly-(uint32_t)dy;
+            if(row!=previous){
+                memcpy(inrow,base+(uint64_t)row*ss+(uint64_t)sx*4,(size_t)w*4);
+                for(uint32_t i=0;i<n;++i)outrow[i]=inrow[xmap[i]];
+                previous=row;
+            }
+            memcpy((uint8_t*)dst+(uint64_t)py*ds+(uint64_t)px0*4,outrow,(size_t)n*4);
+        }
+        return 1;
+    }
     for(uint32_t py=py0;py<py1;++py){
         uint32_t ly=(uint32_t)((uint64_t)py*lh/dh);
         if(ly<(uint32_t)dy)ly=(uint32_t)dy;
@@ -78,5 +108,12 @@ static inline int b2l_blit_scaled(void *dst,uint64_t dbytes,uint32_t dw,uint32_t
         }
     }
     return 1;
+}
+
+static inline int b2l_blit_scaled(void *dst,uint64_t dbytes,uint32_t dw,uint32_t dh,uint32_t ds,
+    const void *src,uint64_t sbytes,uint32_t sw,uint32_t sh,uint32_t ss,uint32_t soff,
+    uint32_t lw,uint32_t lh,int32_t sx,int32_t sy,int32_t dx,int32_t dy,int32_t width,int32_t height)
+{
+    return b2l_blit_scaled_scratch(dst,dbytes,dw,dh,ds,src,sbytes,sw,sh,ss,soff,lw,lh,sx,sy,dx,dy,width,height,NULL,0);
 }
 #endif

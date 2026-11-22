@@ -384,6 +384,9 @@ STATIC EFI_STATUS B2lBootXnu(EFI_HANDLE ImageHandle)
                  * 12000 ticks (500 us at Apple's 24 MHz, 461 us at the Exynos 26 MHz), tuned for Apple CPUs at full
                  * clock; with the load limit (B2LCPU.cpp) ordinary sections run at 0.44-0.52 GHz. 1 = trace, no panic. */
                 "interrupt-masked-debug-mode=1"
+                /* S10e build 24: B2L PERF / PERF CALLS every 10 s (two lines): what the scaled copy to the panel
+                 * costs, before and after its row-at-a-time path */
+                " b2l_perf=1"
                 B2L_FB_LOGICAL_ARGS);
     Entry = Base + Mach.entry - Mach.virtual_base;
     if(Kernel){FreePool(Kernel); Kernel = NULL;}

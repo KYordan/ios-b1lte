@@ -12,6 +12,7 @@
 #include <arm64/b2l_early.h>
 #include <arm64/b2l_diag.h>
 #include <pexpert/device_tree.h>
+#include <pexpert/pexpert.h>
 extern "C" {
 #include "B2LSecTsParser.h"
 }
@@ -118,7 +119,13 @@ void B2LInput::initializeTouch(){
                 if(command(0x21,&integrity,1)){
                     stage="boot-status";
                     if(command(0x55,&boot,1)&&boot==0x20&&(integrity&0x80)){
-                        uint8_t clear=0x62,functions[3]={0x30,0x61,0x00},sense=0x10;
+                        /* SET_TOUCHFUNCTION (0x30), 16 bits little-endian: Samsung's default TOUCH|PALM|WET (0x61).
+                         * S10e build 24: plus GLOVE (bit 3, 0x69), what Samsung's own "Touch sensitivity" setting for
+                         * screen protectors writes (sec_ts glove_mode); glove-type touches are parsed as fingers
+                         * (B2LSecTsParser.c). boot-arg b2l_touch_glove=0: the default bits only. */
+                        uint32_t glove=1;
+                        PE_parse_boot_argn("b2l_touch_glove",&glove,sizeof(glove));
+                        uint8_t clear=0x62,functions[3]={0x30,(uint8_t)(glove?0x69:0x61),0x00},sense=0x10;
                         stage="clear-events";
                         if(writeCommand(&clear,1)){
                             stage="touch-functions";

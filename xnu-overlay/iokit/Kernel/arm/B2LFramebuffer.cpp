@@ -93,6 +93,8 @@ public:
 	uint32_t      fSwapID;
 	bool          fConsolePaused;
 	bool          fDisplayOff;      /* RequestPowerChange(0): panel black, swaps not shown until power on */
+	uint32_t     *fScratch;         /* S10e build 24: cached rows for the scaled copy (B2LBlit.h), used under fLock */
+	uint64_t      fScratchWords;
 
 	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
 	void setPower(bool on);
@@ -167,6 +169,19 @@ AppleCLCD::start(IOService *provider)
 	}
 	fLock = IOLockAlloc();
 	fClients = OSArray::withCapacity(4);
+	if (fScaled) {
+		/* column table + one source row + one panel row (B2LBlit.h); without it the copy reads uncached memory a
+		 * pixel at a time, as before build 24 */
+		uint32_t fast = 1;
+		PE_parse_boot_argn("b2l_fb_fastscale", &fast, sizeof(fast));
+		fScratchWords = (uint64_t)fLogicalW + 2ull * fWidth;
+		fScratch = fast ? (uint32_t *)IOMalloc((vm_size_t)(fScratchWords * 4)) : NULL;
+		if (fScratch == NULL) {
+			fScratchWords = 0;
+		}
+		IOLog("B2L FB: scaled copy %ux%u -> %ux%u: %s\n", fLogicalW, fLogicalH, fWidth, fHeight,
+		    fScratch != NULL ? "row at a time through cached scratch" : "pixel at a time (b2l_fb_fastscale=0)");
+	}
 	/* The default surface must have the presented size: a mismatch leaves
 	 * every swap layer empty. Scaled, it is the panel's top-left part. */
 	fSurface = b2l_surface_create_physical(fPhys, fLogicalW, fLogicalH, fRowBytes, B2L_FB_FORMAT_BGRA);
@@ -386,9 +401,9 @@ AppleCLCD::swap(const uint8_t *rec)
             }
             uint64_t b2l_t0 = mach_absolute_time();   /* B1L-0095: what the copy to the panel costs */
             int shown=fScaled?
-                b2l_blit_scaled((void*)fPixels,fPixelBytes,fWidth,fHeight,fRowBytes,
+                b2l_blit_scaled_scratch((void*)fPixels,fPixelBytes,fWidth,fHeight,fRowBytes,
                 (const void*)src,s->memory->getLength(),s->width,s->height,s->bytesPerRow,s->offset,
-                fLogicalW,fLogicalH,sx,sy,dx,dy,w,h):
+                fLogicalW,fLogicalH,sx,sy,dx,dy,w,h,fScratch,fScratchWords):
                 b2l_blit((void*)fPixels,fPixelBytes,fWidth,fHeight,fRowBytes,
                 (const void*)src,s->memory->getLength(),s->width,s->height,s->bytesPerRow,s->offset,
                 sx,sy,dx,dy,w,h);
