@@ -1,0 +1,56 @@
+--- a/bsd/kern/kern_mman.c
++++ b/bsd/kern/kern_mman.c
+@@ -122,6 +122,10 @@
+ #include <kern/host.h>
+ #include <kern/task.h>
+ #include <kern/page_decrypt.h>
++#if defined(ARM64_BOARD_CONFIG_B2L)
++#include <kern/startup.h>
++#include <os/atomic_private.h>
++#endif
+ 
+ #include <IOKit/IOReturn.h>
+ #include <IOKit/IOBSD.h>
+@@ -275,6 +279,11 @@
+  * XXX usage is PROT_* from an interface perspective.  Thus the values of
+  * XXX VM_PROT_* and PROT_* need to correspond.
+  */
++#if defined(ARM64_BOARD_CONFIG_B2L)
++static TUNABLE(bool, b2l_webkit_jit, "b2l_webkit_jit", false);
++static int b2l_jit_logged_pid = -1;
++#endif
++
+ int
+ mmap(proc_t p, struct mmap_args *uap, user_addr_t *retval)
+ {
+@@ -480,6 +489,30 @@
+ 		printf("[%d] code signing monitor denies JIT mapping\n", proc_pid(p));
+ 		return EPERM;
+ 	}
++
++#if defined(ARM64_BOARD_CONFIG_B2L)
++	/*
++	 * B2L: WebKit's JIT freezes the whole board less than a second after its first code runs (B1L-0218..0223,
++	 * S10e builds 21/22: the log stops right after com.apple.WebKit.WebContent/GPU start, with no panic). Until that
++	 * is understood, WebKit gets the answer a process without the JIT entitlement gets, and JavaScriptCore runs on
++	 * its interpreter, as it does in every app that is not allowed to JIT. boot-arg b2l_webkit_jit=1 gives it back.
++	 * Any other MAP_JIT user is allowed and named once per process, so we learn who else JITs.
++	 */
++	if (flags & MAP_JIT) {
++		const char *jit_name = proc_best_name(p);
++		bool jit_webkit = strncmp(jit_name, "com.apple.WebKit", 16) == 0;
++		if (jit_webkit && !b2l_webkit_jit) {
++			if (os_atomic_xchg(&b2l_jit_logged_pid, proc_getpid(p), relaxed) != proc_getpid(p)) {
++				printf("B2L JIT: MAP_JIT refused for %s[%d], JavaScriptCore runs without JIT\n",
++				    jit_name, proc_getpid(p));
++			}
++			return EPERM;
++		}
++		if (os_atomic_xchg(&b2l_jit_logged_pid, proc_getpid(p), relaxed) != proc_getpid(p)) {
++			printf("B2L JIT: MAP_JIT allowed for %s[%d]\n", jit_name, proc_getpid(p));
++		}
++	}
++#endif
+ 
+ 	if (flags & MAP_ANON) {
+ 		maxprot = VM_PROT_ALL;
