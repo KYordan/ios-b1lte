@@ -286,7 +286,12 @@ AppleCLCD::setPower(bool on)
 	fDisplayOff = !on;
 	if (changed && !on && fPixels != 0) {
 		(void)b2l_zc_show(fPhys, fRowBytes);   /* scan the panel memory again if a client surface was shown */
-		bzero((void *)fPixels, (size_t)fRowBytes * fHeight);
+		/* Plain stores: bzero uses DC ZVA, which faults on this write-combined (device) mapping (build 16 panic:
+		 * "Unaligned kernel data abort", esr 0x96000061, x2 = 4320 * 2280). */
+		volatile uint64_t *p = (volatile uint64_t *)fPixels;
+		for (size_t i = 0, n = (size_t)fRowBytes * fHeight / 8; i < n; i++) {
+			p[i] = 0;
+		}
 		__asm__ volatile("dsb sy":::"memory");
 	}
 	IOLockUnlock(fLock);
