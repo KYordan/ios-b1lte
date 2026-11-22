@@ -1,10 +1,12 @@
-# ios-b1lte · `beyond0lte` branch
+# ios-s10e
+
+*(formerly `ios-b1lte`; the S10e port lives on the `beyond0lte` branch)*
 
 **iOS 26 on the Samsung Galaxy S10e (`beyond0lte`, SM-G970F, Exynos 9820)**
 
 Apple's open-source XNU kernel running on a Galaxy S10e and booting the **unmodified iOS 26 userland** (launchd, system daemons, backboardd, SpringBoard) from the phone's own storage.
 
-This branch is the S10e port. It shares the kernel, drivers and loader with the Galaxy S10 port on [`main`](https://github.com/KYordan/ios-b1lte/tree/main) (`beyond1lte`, SM-G973F) and adds the S10e board profile, its 6 GB memory map, the 1080 × 2280 display, a Linux/WSL image pipeline and a GitHub Actions build, so **no Mac is needed**.
+This branch is the S10e port. It shares the kernel, drivers and loader with the Galaxy S10 port on [`main`](https://github.com/KYordan/ios-s10e/tree/main) (`beyond1lte`, SM-G973F) and adds the S10e board profile, its 6 GB memory map, the 1080 × 2280 display, a Linux/WSL image pipeline and a GitHub Actions build, so **no Mac is needed**.
 
 **Today (November 2026):** the S10e boots to the iOS 26 lock screen and home screen, full screen, with touch and Wi-Fi. Settings, Control Center, Photos and the App Library open. Power off (iOS and boot menu), battery level and charging, and display sleep work. Next: storage size, then [Metal on the GPU](docs/plans/s10e-metal.md).
 
