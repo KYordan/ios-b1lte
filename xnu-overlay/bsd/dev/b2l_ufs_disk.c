@@ -507,6 +507,9 @@ b2l_ufs_disk_init(void)
 		printf("B2L UFS: device node failed error=%d\n", error); return;
 	}
 	printf("B2L UFS: /dev/b2lufs0 and /dev/rb2lufs0 ready (read-only)\n");
+	error = b2l_disk_publish(capacity, geometry.block_size, b2l_block_major, 0);
+	printf("B2L UFS: disk0 registry entry %s error=%d bytes=%llu\n",
+	    error ? "not published" : "published", error, capacity);
 	lck_mtx_lock(&b2l_ufs_disk_lock);
 	error = b2l_gpt_read(&b2l_reader, &b2l_partitions);
 	lck_mtx_unlock(&b2l_ufs_disk_lock);

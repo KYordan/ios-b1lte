@@ -8,6 +8,8 @@
 #include <IOKit/IOLib.h>
 #include <libkern/libkern.h>   /* printf: reaches the console and the persistent log, even at halt */
 #include <IOKit/IOKitKeys.h>
+#include <IOKit/IOBSD.h>
+#include <sys/errno.h>
 #include <libkern/c++/OSData.h>
 #include <pexpert/pexpert.h>
 #include "B2LBattery.h"
@@ -199,5 +201,62 @@ B2LPlatformExpert::processTopLevel(IORegistryEntry *root)
     IORegistryEntry *armio=root->childFromPath("arm-io",gIODTPlane);
     if(armio){createNubs(this,IODTFindMatchingEntries(armio,kIODTExclusive,"('gic')"));armio->release();}
 
+}
+
+/* Storage size for MobileGestalt. libMobileGestalt (23G90) answers DiskUsage/TotalDiskCapacity with
+ * IOServiceGetMatchingService(IOBSDNameMatching("disk0")) and the SInt64 "Size" (kIOMediaSizeKey) of what it
+ * finds; with nothing named disk0, Settings > General > About showed "Capacity: Zero KB" (S10e builds 8-17).
+ * This entry describes the real whole UFS logical unit (/dev/b2lufs0, read-only) with the size READ CAPACITY
+ * returned. It is not an IOMedia: no IOStorageFamily client, root search (IOMedia, Content = Apple_HFS) and
+ * the native root selector are unchanged. Kill switch: boot-arg b2l_disk0=0. */
+class B2LDisk : public IOService {
+	OSDeclareDefaultStructors(B2LDisk);
+};
+OSDefineMetaClassAndStructors(B2LDisk, IOService);
+
+extern "C" int
+b2l_disk_publish(uint64_t bytes, uint32_t block_size, int major, int minor)
+{
+	int enabled = 1;
+	PE_parse_boot_argn("b2l_disk0", &enabled, sizeof(enabled));
+	if (!enabled) {
+		return ENOTSUP;
+	}
+	/* b2l_ufs_disk_init runs in bsd_init; the platform expert normally exists by then, IOResources always. */
+	IOService *platform = IOService::getPlatform();
+	if (platform == NULL) {
+		platform = IOService::getResourceService();
+	}
+	if (platform == NULL || bytes == 0 || block_size == 0) {
+		return ENXIO;
+	}
+	B2LDisk *disk = OSTypeAlloc(B2LDisk);
+	if (disk == NULL || !disk->init()) {
+		OSSafeReleaseNULL(disk);
+		return ENOMEM;
+	}
+	disk->setName("B2LDisk");
+	disk->setProperty(kIOBSDNameKey, "disk0");
+	disk->setProperty(kIOBSDUnitKey, 0ULL, 32);
+	disk->setProperty(kIOBSDMajorKey, (unsigned long long)major, 32);
+	disk->setProperty(kIOBSDMinorKey, (unsigned long long)minor, 32);
+	disk->setProperty("Size", bytes, 64);
+	disk->setProperty("Preferred Block Size", (unsigned long long)block_size, 64);
+	disk->setProperty("Whole", true);
+	disk->setProperty("Writable", false);
+	disk->setProperty("Removable", false);
+	disk->setProperty("Ejectable", false);
+	disk->setProperty("B2L Device", "b2lufs0");
+	int error = 0;
+	if (!disk->attach(platform)) {
+		error = EIO;
+	} else if (!disk->start(platform)) {
+		disk->detach(platform);
+		error = EIO;
+	} else {
+		disk->registerService();
+	}
+	disk->release();
+	return error;
 }
 #endif

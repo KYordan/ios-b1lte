@@ -190,6 +190,7 @@ Build numbers are GitHub Actions runs of `build-boot.yml`; only `boot.img` (`sda
 | 15 | Charger state decoded as Samsung's `max77705_charger.c` (`CHGIN_DTLS` too; `CHG_DTLS` 3-4 full); battery log only on changes, 10 s poll | superseded by 16 |
 | 16 | Display sleep: IOMobileFramebuffer selector 12 (`kern_RequestPowerChange`, one scalar, 0 = off) implemented: panel black while off, swaps not shown until on. Selector 79 is `IOMobileFramebufferGetBlock` (block 0x40, 44 bytes), a read only | **Charging shown on USB** (about 4 W, no fast-charge negotiation). Display off panicked: "Unaligned kernel data abort" in `bzero` (esr 0x96000061, x2 = 4320 × 2280): `DC ZVA` is not allowed on the write-combined panel mapping |
 | 17 | Panel cleared with plain 64-bit stores | **Display sleep works** (power button and auto-lock). **Menu power off works** (`wtsr 0, acpm 0`, the phone switches off) |
+| 18 | Storage size: libMobileGestalt (23G90) answers `TotalDiskCapacity` from `IOServiceGetMatchingService(IOBSDNameMatching("disk0"))` and its SInt64 `Size`. `b2l_ufs_disk_init` now publishes `B2LDisk` (`BSD Name` = `disk0`, `Size` = READ CAPACITY of the whole LU, read-only, not an IOMedia). Log line `B2L UFS: disk0 registry entry published`; boot-arg `b2l_disk0=0` turns it off | not tested yet |
 
 Status after build 17: power off from iOS and the menu, battery level and charging, display sleep and full-screen
 iOS all work. The phone draws about 1 A with the screen on (CPU composition, no CPU idle states): expect 2.5–3 h from

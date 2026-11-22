@@ -9,6 +9,8 @@ extern "C" {
 void b2l_ufs_disk_init(void);
 /* Only the selected unique HFS SYSTEM/USERDATA node can become a native root. */
 int b2l_ufs_root_device(dev_t *dev);
+/* B2LPlatformExpert.cpp: registry entry "disk0" with the whole-LU size, for MobileGestalt's TotalDiskCapacity. */
+int b2l_disk_publish(uint64_t bytes, uint32_t block_size, int major, int minor);
 #ifdef __cplusplus
 }
 #endif
