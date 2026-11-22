@@ -49,7 +49,7 @@ Tested on the phone unless marked otherwise. Build numbers are GitHub Actions ru
 | **SpringBoard & apps** | 🚧 Partial | Lock screen, home screen, dock, Control Center, Settings, Photos, App Library; widgets stay at "Waiting…", app-switcher snapshots are black |
 | **Power off / restart** | 🚧 Partial | Restart works. **Power off from iOS works** since build 12 (PMIC WTSR/SMPL disarmed, APM stopped, then `PS_HOLD`). The boot menu's *Power off* still restarts: the UEFI GCD describes the APM memory only in part (`wtsr -14, acpm -14`); build 14 maps the missing pieces, untested |
 | **Battery** | ✅ Works | Level shown in Settings and the status bar since build 13 (`B2LBattery`: MAX77705 fuel gauge; the driver sets up the bus the bootloader leaves unconfigured: USI mode, pins, timings). Charging state not checked yet |
-| **Display sleep** | ❌ Not working | The power button dims and freezes the picture; backboardd's display-power request (IOMobileFramebuffer selector 79) is not implemented |
+| **Display sleep** | 🚧 In progress | The power button dimmed and froze the picture: backboardd's `RequestPowerChange` (IOMobileFramebuffer selector 12, found in the 23G90 dyld cache) was answered *unsupported*. Build 16 implements it (panel black while off, swaps held), untested |
 | **Storage size** | ❌ Not working | *Capacity* reads "Zero KB" (no IOMedia for the UFS disk); *Available* is right |
 | **GPU (Metal)** | ❌ Not on the S10e yet | The Mali-G76 comes up and runs test jobs; the S10e SYSTEM image does not carry the Metal userland yet. Plan: [docs/plans/s10e-metal.md](docs/plans/s10e-metal.md) (the S10 already draws its interface on the GPU: [metal-progress.md](docs/gpu/metal-progress.md)) |
 | **Audio, Bluetooth** | ⏸️ Parked | As on the S10 |

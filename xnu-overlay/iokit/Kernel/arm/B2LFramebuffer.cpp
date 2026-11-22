@@ -42,6 +42,7 @@ enum {
 	kB2LFBSwapWait                = 6,
 	kB2LFBGetID                   = 7,
 	kB2LFBGetDisplaySize          = 8,
+	kB2LFBRequestPowerChange      = 12,  /* kern_RequestPowerChange(state): 0 off, else on (23G90 0x22949cc1c) */
 	kB2LFBIsMainDisplay           = 18,
 	kB2LFBGetDotPitch             = 28,
 	kB2LFBNotifications           = 72,
@@ -91,8 +92,10 @@ public:
 	OSArray      *fClients;
 	uint32_t      fSwapID;
 	bool          fConsolePaused;
+	bool          fDisplayOff;      /* RequestPowerChange(0): panel black, swaps not shown until power on */
 
 	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
+	void setPower(bool on);
 	void addClient(IOMobileFramebufferUserClient *client);
 	void removeClient(IOMobileFramebufferUserClient *client);
 	void swap(const uint8_t *rec);
@@ -270,11 +273,38 @@ get32(const uint8_t *p, uint32_t off)
 
 static uint32_t b2l_fb_swaps_logged;
 
+/* Display sleep. backboardd turns the display off and on with IOMobileFramebuffer selector 12
+ * (kern_RequestPowerChange, one scalar: 0 off, else on); it was answered "unsupported", so the power button and
+ * auto-lock only froze the last frame. There is no panel power control here (the panel was set up by the
+ * bootloader), so off = the panel memory filled with black: an AMOLED pixel showing black emits no light. While off,
+ * swaps are not shown; on power on the next swap draws again. */
+void
+AppleCLCD::setPower(bool on)
+{
+	IOLockLock(fLock);
+	bool changed = fDisplayOff == on;
+	fDisplayOff = !on;
+	if (changed && !on && fPixels != 0) {
+		(void)b2l_zc_show(fPhys, fRowBytes);   /* scan the panel memory again if a client surface was shown */
+		bzero((void *)fPixels, (size_t)fRowBytes * fHeight);
+		__asm__ volatile("dsb sy":::"memory");
+	}
+	IOLockUnlock(fLock);
+	if (changed) {
+		char name[32];
+		proc_selfname(name, sizeof(name));
+		IOLog("B2L FB: display %s (%s)\n", on ? "on" : "off", name);
+	}
+}
+
 /* Copy each enabled layer's surface into the panel memory, scaling the
  * logical canvas to the panel when a smaller logical size is selected. */
 void
 AppleCLCD::swap(const uint8_t *rec)
 {
+	if (__atomic_load_n(&fDisplayOff, __ATOMIC_ACQUIRE)) {
+		return;   /* display off: nothing is shown until RequestPowerChange(1) */
+	}
 	/* kern_SwapSetLayer stores client+0x164/+0x168; kern_SwapEnd sends
 	 * client+0x18. client+0x194 (wire+0x17c) is unrelated and cleared by
 	 * SwapBegin. Reading it silently discarded every native CPU frame. */
@@ -318,7 +348,8 @@ AppleCLCD::swap(const uint8_t *rec)
 			    (w <= 0 || (uint32_t)w == fWidth) && (h <= 0 || (uint32_t)h == fHeight) &&
 			    s->width == fWidth && s->height == fHeight && s->bytesPerRow >= fRowBytes &&
 			    (s->bytesPerRow & 3) == 0;
-			if (phys != 0 && whole && !fScaled && b2l_zc_show(phys, s->bytesPerRow)) {
+			if (phys != 0 && whole && !fScaled && !__atomic_load_n(&fDisplayOff, __ATOMIC_ACQUIRE) &&
+			    b2l_zc_show(phys, s->bytesPerRow)) {
 				if (!fConsolePaused) {
 					b2l_early_gui_present();
 					fConsolePaused = true;
@@ -338,6 +369,11 @@ AppleCLCD::swap(const uint8_t *rec)
             s->pixelFormat==B2L_FB_FORMAT_BGRA) {
             if(w<=0||h<=0){w=(int32_t)s->width;h=(int32_t)s->height;}
             IOLockLock(fLock);
+            if (fDisplayOff) {   /* turned off while this swap was on its way: keep the panel black */
+                IOLockUnlock(fLock);
+                s->release();
+                return;
+            }
             uint64_t b2l_t0 = mach_absolute_time();   /* B1L-0095: what the copy to the panel costs */
             int shown=fScaled?
                 b2l_blit_scaled((void*)fPixels,fPixelBytes,fWidth,fHeight,fRowBytes,
@@ -833,6 +869,13 @@ IOMobileFramebufferUserClient::externalMethod(uint32_t selector, IOExternalMetho
 		}
 		break;
 	case kB2LFBSwapWait:
+		break;
+	case kB2LFBRequestPowerChange:
+		if (args->scalarInputCount < 1 || args->scalarInput == NULL) {
+			ret = kIOReturnBadArgument;
+			break;
+		}
+		fFB->setPower(args->scalarInput[0] != 0);
 		break;
     default: ret=kIOReturnUnsupported;break;
 	}

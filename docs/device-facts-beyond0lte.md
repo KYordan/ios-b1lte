@@ -186,7 +186,9 @@ Build numbers are GitHub Actions runs of `build-boot.yml`; only `boot.img` (`sda
 | 11 | ACPM stop before `PS_HOLD` (Samsung `exynos_acpm_reboot`); battery driver | Power off still restarts; log: battery bus "has no timings" (left unconfigured by the bootloader) |
 | 12 | WTSR/SMPL disarmed through ACPM before power off (Samsung `s2m_rtc_shutdown`); battery bus set up (USI_CMGP03 I2C mode, USI reset released, fast-mode timings) | **Power off from iOS switches the phone off.** The menu's *Power off* still restarts (no on-screen note: the APM SRAM is not mapped in UEFI, so both ACPM steps were skipped). Battery: USI mode was `0x0` and is now I2C, but the first byte stays in the TX FIFO (`trans=0xa0006 fifo=0x1000001`): the pins were never muxed |
 | 13 | UEFI maps the APM SRAM and mailbox (GCD MMIO, uncached) and shows both ACPM results for 3 s before `PS_HOLD`; battery pins `gpm12-0`/`gpm13-0` set to function 2, no pull (DT `hsi2c45-bus`) | **Battery works: 56 % in Settings and the status bar.** Menu power off: `wtsr -14, acpm -14`, then a restart: the GCD describes the APM ranges only in part, so nothing was sent |
-| 14 | `Mapped()` walks the range descriptor by descriptor and adds only the absent pieces | not tested yet |
+| 14 | `Mapped()` walks the range descriptor by descriptor and adds only the absent pieces | superseded by 16 |
+| 15 | Charger state decoded as Samsung's `max77705_charger.c` (`CHGIN_DTLS` too; `CHG_DTLS` 3-4 full); battery log only on changes, 10 s poll | superseded by 16 |
+| 16 | Display sleep: IOMobileFramebuffer selector 12 (`kern_RequestPowerChange`, one scalar, 0 = off) implemented: panel black while off, swaps not shown until on. Selector 79 is `IOMobileFramebufferGetBlock` (block 0x40, 44 bytes), a read only | not tested yet |
 
 Seen on boot 8–11, still open: the power button dims and freezes the picture instead of turning the display off
 (backboardd calls IOMobileFramebuffer selector 79 with 0x40, answered *unsupported*); *Settings → General → About*
