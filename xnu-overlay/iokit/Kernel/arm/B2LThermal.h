@@ -76,4 +76,43 @@ static inline uint32_t b2l_thr_step(uint32_t lv, uint32_t base, uint32_t floor,
 	if (mc <= lo_mc && lv > base) return lv - 1;
 	return lv;
 }
+
+/*
+ * Load limit (S10e build 18). Until now the clusters ran at the boot's DVFS target whenever they were cool, busy or
+ * idle (A55 1.85 GHz, A75 2.21 GHz): about 1 A with the screen on. Each 100 ms the thermal thread measures the
+ * busiest CPU of a cluster (busy_pm, permille of the sample) and asks for the slowest level that still covers that
+ * work at target_pm busy: rate >= rate[cur] * busy_pm / target_pm. At or above jump_pm it goes straight to base
+ * (touch, scrolling). Never faster than base, never slower than slowest. rate[] is the fvmap table, strictly
+ * descending (0 = fastest).
+ */
+static inline uint32_t b2l_load_level(const uint32_t *rate, uint32_t count, uint32_t cur, uint32_t busy_pm,
+    uint32_t base, uint32_t slowest, uint32_t target_pm, uint32_t jump_pm)
+{
+	if (count == 0 || target_pm == 0) return 0;
+	if (slowest >= count) slowest = count - 1;
+	if (base > slowest) base = slowest;
+	if (cur >= count) cur = base;
+	if (busy_pm >= jump_pm) return base;
+	uint64_t want = (uint64_t)rate[cur] * busy_pm / target_pm;
+	uint32_t lv = base;
+	while (lv < slowest && rate[lv + 1] >= want) lv++;
+	return lv;
+}
+
+/* Faster (lower level) at once; slower only after `need` samples in a row asked for it. */
+static inline uint32_t b2l_load_settle(uint32_t now, uint32_t want, uint32_t *slower, uint32_t need)
+{
+	if (want <= now) { *slower = 0; return want; }
+	if (++*slower < need) return now;
+	*slower = 0;
+	return want;
+}
+
+/* The slowest level at or above min_khz (the load limit's bottom), or the table's last level. */
+static inline uint32_t b2l_load_slowest(const uint32_t *rate, uint32_t count, uint32_t min_khz)
+{
+	uint32_t lv = 0;
+	while (lv + 1 < count && rate[lv + 1] >= min_khz) lv++;
+	return lv;
+}
 #endif

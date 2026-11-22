@@ -33,6 +33,29 @@ int main(void)
 	lv = b2l_thr_step(lv, 1, 6, 70000, 65000, 60000, 72000); CHECK(lv == 6, "floor hold %u", lv);
 	for (int i = 0; i < 10; i++) lv = b2l_thr_step(lv, 1, 6, 55000, 65000, 60000, 72000);
 	CHECK(lv == 1, "back to base %u", lv);
+	/* load limit: an A55-like table, base 1 (1846 MHz) */
+	static const uint32_t r[8] = { 2002000, 1846000, 1534000, 1248000, 1053000, 832000, 650000, 455000 };
+	uint32_t slow = b2l_load_slowest(r, 8, 400000);
+	CHECK(slow == 7, "slowest %u", slow);
+	CHECK(b2l_load_slowest(r, 8, 600000) == 6, "slowest 600");
+	CHECK(b2l_load_slowest(r, 8, 3000000) == 0, "slowest above top");
+	CHECK(b2l_load_level(r, 8, 1, 0, 1, slow, 800, 900) == 7, "idle -> slowest");
+	CHECK(b2l_load_level(r, 8, 1, 950, 1, slow, 800, 900) == 1, "jump -> base");
+	CHECK(b2l_load_level(r, 8, 7, 950, 1, slow, 800, 900) == 1, "jump from bottom");
+	/* 1846 MHz at 50 % busy = 1154 MHz of work at 80 %: slowest covering level is 1248 MHz (3) */
+	CHECK(b2l_load_level(r, 8, 1, 500, 1, slow, 800, 900) == 3, "half load %u", b2l_load_level(r, 8, 1, 500, 1, slow, 800, 900));
+	/* at 455 MHz and 85 % busy: 483 MHz needed -> 650 MHz (6) */
+	CHECK(b2l_load_level(r, 8, 7, 850, 1, slow, 800, 900) == 6, "creep up");
+	CHECK(b2l_load_level(r, 8, 1, 0, 1, 4, 800, 900) == 4, "bounded by slowest");
+	CHECK(b2l_load_level(r, 8, 1, 0, 9, slow, 800, 900) == 7, "base clamped");
+	CHECK(b2l_load_level(r, 0, 1, 0, 1, slow, 800, 900) == 0, "empty table");
+	uint32_t n = 0, now = 1;
+	now = b2l_load_settle(now, 7, &n, 3); CHECK(now == 1 && n == 1, "settle 1");
+	now = b2l_load_settle(now, 7, &n, 3); CHECK(now == 1 && n == 2, "settle 2");
+	now = b2l_load_settle(now, 7, &n, 3); CHECK(now == 7 && n == 0, "settle 3 -> down");
+	now = b2l_load_settle(now, 6, &n, 3); CHECK(now == 6 && n == 0, "up at once");
+	now = b2l_load_settle(now, 7, &n, 3); now = b2l_load_settle(now, 3, &n, 3);
+	CHECK(now == 3 && n == 0, "up resets the count");
 	printf("checks=%d fails=%d\n", checks, fails);
 	return fails != 0;
 }

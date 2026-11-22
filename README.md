@@ -39,7 +39,7 @@ Tested on the phone unless marked otherwise. Build numbers are GitHub Actions ru
 | --- | --- | --- |
 | **Boot chain** | ✅ Works | S-Boot → UEFI → boot menu → XNU → Apple logo → lock screen |
 | **Boot menu** | ✅ Works | S10e layout; 10 s countdown; *Reboot* and *Reboot to recovery* (TWRP) confirmed. *Power off*: see Power below |
-| **CPU / SMP** | ✅ Works | All 8 CPUs start |
+| **CPU / SMP** | ✅ Works | All 8 CPUs start. Clocks: boot target with a thermal cap; build 18 adds a load limit (lower clocks when idle, for battery life), not tested yet |
 | **RAM** | ✅ Works | 6 GB profile, no access past the end of DRAM |
 | **Display** | ✅ Works | Full screen since build 8 (the scaled copy used to cover only 1912 of the 2280 rows and wrote past its mapping). CPU composition, about 7–20 frames/s |
 | **Touch** | ✅ Works | sec_ts Y761 behaves like the S10's Y771 |
@@ -118,6 +118,7 @@ Set by the loader (`XnuLoader`) or useful when experimenting:
 | `b2l_fb_lw`, `b2l_fb_lh` | iOS canvas size, scaled to the panel | `880` × `1912` on the S10e |
 | `b2l_battery=0` | Do not start the battery driver | started |
 | `b2l_disk0=0` | Do not publish the `disk0` registry entry (storage size in Settings) | published |
+| `b2l_governor=0` | CPU clusters at their boot/thermal level, no load limit (before build 18) | load limit on |
 | `b2l_synth_mac=0` | No synthetic MAC addresses in `/chosen` | on |
 | `b2l_gl=1` | OpenGL ES instead of Metal | off |
 | `keepsyms=1` | Kernel symbols in panic logs | recommended during bring-up |

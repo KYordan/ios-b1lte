@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-2-Clause
  * Exynos 9820 eight-CPU A55/A75/M4 trial through the stock SMC conduit.
- * Firmware targets0..5 and0x100/0x101. No CPU_OFF, suspend or DVFS policy.
+ * Firmware targets0..5 and0x100/0x101. No CPU_OFF or suspend; DVFS: boot target, thermal cap and (build 18) load limit.
  */
 #include <pexpert/arm64/board_config.h>
 #if defined(B2L)
@@ -13,6 +13,8 @@
 extern "C" int get_preemption_level(void);
 #include <kern/clock.h>
 #include <kern/processor.h>
+#include <mach/machine.h>          /* CPU_STATE_* (load limit) */
+#include <mach/processor_info.h>   /* PROCESSOR_CPU_LOAD_INFO */
 #include <kern/thread.h>
 #include <mach/mach_time.h>
 #include <pexpert/pexpert.h>
@@ -512,6 +514,38 @@ static int32_t b2l_zone_mc(unsigned z)
     return best;
 }
 
+/* Busiest CPU of each cluster since the last call, in permille (1000 when unknown: no lowering). Ticks are
+ * processor_info's PROCESSOR_CPU_LOAD_INFO (recount, 10 ms each); CPUs 0-3 A55, 4-5 A75, 6-7 M4. */
+extern "C" kern_return_t processor_info(processor_t, processor_flavor_t, host_t *, processor_info_t,
+    mach_msg_type_number_t *);
+static void b2l_cluster_busy(uint32_t busy_pm[3])
+{
+    static uint32_t last_busy[MAX_CPUS], last_total[MAX_CPUS];
+    static bool have[MAX_CPUS];
+    for (unsigned c = 0; c < 3; c++) busy_pm[c] = 0;
+    for (unsigned cpu = 0; cpu < MAX_CPUS; cpu++) {
+        unsigned c = cpu < 4 ? 0 : cpu < 6 ? 1 : 2;
+        processor_t p = cpu_to_processor((int)cpu);
+        struct processor_cpu_load_info load = {};
+        mach_msg_type_number_t count = PROCESSOR_CPU_LOAD_INFO_COUNT;
+        host_t host = HOST_NULL;
+        uint32_t pm = 1000;
+        if (p != PROCESSOR_NULL &&
+            processor_info(p, PROCESSOR_CPU_LOAD_INFO, &host, (processor_info_t)&load, &count) == KERN_SUCCESS) {
+            uint32_t busy = load.cpu_ticks[CPU_STATE_USER] + load.cpu_ticks[CPU_STATE_SYSTEM];
+            uint32_t total = busy + load.cpu_ticks[CPU_STATE_IDLE];
+            uint32_t db = busy - last_busy[cpu], dt = total - last_total[cpu];
+            if (have[cpu] && dt != 0) pm = db >= dt ? 1000 : db * 1000 / dt;
+            last_busy[cpu] = busy;
+            last_total[cpu] = total;
+            have[cpu] = true;
+        } else {
+            have[cpu] = false;
+        }
+        if (pm > busy_pm[c]) busy_pm[c] = pm;
+    }
+}
+
 static void b2l_thermal_thread(void *, wait_result_t)
 {
     static const uint32_t idx[4] = { 2, 3, 4, 10 };
@@ -550,28 +584,70 @@ static void b2l_thermal_thread(void *, wait_result_t)
         b2l_early_trace("B2L THERMAL: %s table=%d levels=%u base=%u kHz floor=%u kHz\n", name[c], usable[c] ? 0 : -1,
             usable[c] ? t[c].count : 0, usable[c] ? t[c].rate[base[c]] : 0, usable[c] ? t[c].rate[floor[c]] : 0);
     }
+    /* Load limit (B2LThermal.h b2l_load_level): every 100 ms; the thermal step stays once a second and is a cap
+     * the load level never goes faster than. Requested level = the slower of the two. Kill switch: boot-arg
+     * b2l_governor=0 (the clusters stay at their thermal level, as before build 18). */
+    static const uint32_t load_min_khz[3] = { 400000, 500000, 500000 };
+    uint32_t governor = 1;
+    PE_parse_boot_argn("b2l_governor", &governor, sizeof(governor));
+    uint32_t sent[4], ld[4], slower[4] = { 0, 0, 0, 0 }, slowest[4], busy[3] = { 1000, 1000, 1000 }, sum[3] = { 0, 0, 0 };
+    uint32_t requests = 0, failures = 0, samples = 0;
+    for (unsigned c = 0; c < 4; c++) {
+        sent[c] = ld[c] = lv[c];
+        slowest[c] = usable[c] && c < 3 ? b2l_load_slowest(t[c].rate, t[c].count, load_min_khz[c]) : lv[c];
+        if (slowest[c] < base[c]) slowest[c] = base[c];
+    }
+    b2l_early_trace("B2L DVFS LOAD: %s; bottom %u/%u/%u kHz, target 80 %% busy, base at 90 %%\n", governor ? "on" : "off",
+        usable[0] ? t[0].rate[slowest[0]] : 0, usable[1] ? t[1].rate[slowest[1]] : 0, usable[2] ? t[2].rate[slowest[2]] : 0);
+    int32_t mc[B2L_NZONES] = { INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN };
     for (unsigned tick = 0;; tick++) {
-        int32_t mc[B2L_NZONES], hottest = INT32_MIN;
-        for (unsigned z = 0; z < B2L_NZONES; z++) { mc[z] = b2l_zone_mc(z); if (z != B2L_ZONE_G3D && mc[z] > hottest) hottest = mc[z]; }
-        for (unsigned c = 0; c < 4; c++) {
-            int32_t m = mc[zone_of[c]];
-            if (!usable[c] || m == INT32_MIN) continue;
-            if (c < 3 && hottest >= crit * 1000) m = hottest;
-            uint32_t n = b2l_thr_step(lv[c], base[c], floor[c], m, hi * 1000, lo * 1000, crit * 1000);
-            if (n != lv[c]) {
-                int e = b2l_acpm_send_rate(&b2l_thr_acpm, idx[c], t[c].rate[n]);
-                b2l_early_trace("B2L THERMAL: %s %d.%d C -> %u kHz (level %u, ret %d)\n", name[c], m / 1000, (m % 1000) / 100,
-                    t[c].rate[n], n, e);
-                if (!e) lv[c] = n;
+        if (tick % 10 == 0) {
+            int32_t hottest = INT32_MIN;
+            for (unsigned z = 0; z < B2L_NZONES; z++) { mc[z] = b2l_zone_mc(z); if (z != B2L_ZONE_G3D && mc[z] > hottest) hottest = mc[z]; }
+            for (unsigned c = 0; c < 4; c++) {
+                int32_t m = mc[zone_of[c]];
+                if (!usable[c] || m == INT32_MIN) continue;
+                if (c < 3 && hottest >= crit * 1000) m = hottest;
+                uint32_t n = b2l_thr_step(lv[c], base[c], floor[c], m, hi * 1000, lo * 1000, crit * 1000);
+                if (n != lv[c]) {
+                    b2l_early_trace("B2L THERMAL: %s %d.%d C -> cap %u kHz (level %u)\n", name[c], m / 1000, (m % 1000) / 100,
+                        t[c].rate[n], n);
+                    lv[c] = n;
+                }
             }
         }
-        if (tick % 10 == 0)
+        if (governor) {
+            b2l_cluster_busy(busy);
+            for (unsigned c = 0; c < 3; c++) {
+                if (!usable[c]) continue;
+                uint32_t want = b2l_load_level(t[c].rate, t[c].count, sent[c], busy[c], base[c], slowest[c], 800, 900);
+                ld[c] = b2l_load_settle(ld[c], want, &slower[c], 3);
+                sum[c] += busy[c];
+            }
+            samples++;
+        }
+        for (unsigned c = 0; c < 4; c++) {
+            if (!usable[c]) continue;
+            uint32_t n = c < 3 && governor ? (ld[c] > lv[c] ? ld[c] : lv[c]) : lv[c];
+            if (n == sent[c]) continue;
+            int e = b2l_acpm_send_rate(&b2l_thr_acpm, idx[c], t[c].rate[n]);
+            if (e) { if (failures++ < 8) b2l_early_trace("B2L DVFS LOAD: %s %u kHz ret %d\n", name[c], t[c].rate[n], e); continue; }
+            sent[c] = n;
+            requests++;
+        }
+        if (tick % 100 == 0) {
             b2l_early_trace("B2L THERMAL: big=%d mid=%d little=%d g3d=%d C; kHz %u/%u/%u gpu %u\n",
                 mc[0] == INT32_MIN ? -1 : mc[0] / 1000, mc[1] == INT32_MIN ? -1 : mc[1] / 1000,
                 mc[2] == INT32_MIN ? -1 : mc[2] / 1000, mc[3] == INT32_MIN ? -1 : mc[3] / 1000,
-                usable[0] ? t[0].rate[lv[0]] : 0, usable[1] ? t[1].rate[lv[1]] : 0, usable[2] ? t[2].rate[lv[2]] : 0,
-                usable[3] ? t[3].rate[lv[3]] : 0);
-        IOSleep(1000);
+                usable[0] ? t[0].rate[sent[0]] : 0, usable[1] ? t[1].rate[sent[1]] : 0, usable[2] ? t[2].rate[sent[2]] : 0,
+                usable[3] ? t[3].rate[sent[3]] : 0);
+            if (governor && samples)
+                b2l_early_trace("B2L DVFS LOAD: busy %u/%u/%u permille (10 s mean, A55/A75/M4), %u requests, %u failed\n",
+                    sum[0] / samples, sum[1] / samples, sum[2] / samples, requests, failures);
+            sum[0] = sum[1] = sum[2] = 0;
+            samples = 0;
+        }
+        IOSleep(100);
     }
 }
 

@@ -54,7 +54,7 @@ class B2LBattery : public IOPMPowerSource {
 	IOTimerEventSource *fTimer;
 	unsigned            fFailures, fLogs, fLastPercent, fUpdates;
 	uint32_t            fLastChg;
-	bool                fPublished;
+	bool                fPublished, fLastExternal;
 
 	static uint64_t uptimeUS() { uint64_t ns = 0; absolutetime_to_nanoseconds(mach_absolute_time(), &ns); return ns / 1000; }
 	uint32_t r(unsigned off) { uint32_t v = *(volatile uint32_t *)(fI2c + off); __asm__ volatile ("dmb oshld" ::: "memory"); return v; }
@@ -177,6 +177,20 @@ class B2LBattery : public IOPMPowerSource {
 		if (!fPublished) {
 			fPublished = true;
 			registerService();
+		}
+		/* S10e build 18, read only: the charger's settings as the bootloader left them (CHG_DETAILS_02 0xB5 to
+		 * CHG_CNFG_12 0xC3 in Samsung's max77705-private.h; CNFG_02 holds the charge current, CNFG_09 the CHGIN input
+		 * current limit), at the first poll and whenever a charger comes or goes. Charging was ~4 W on USB (build 16):
+		 * these values say whether a limit or the source is the cause, before anything is written. */
+		if (haveChg && (fUpdates == 0 || external != fLastExternal)) {
+			uint8_t cfg[15];
+			bool all = true;
+			for (unsigned i = 0; i < sizeof(cfg) && all; i++) all = readRegs(B2L_BAT_CHG, (uint8_t)(0xB5 + i), &cfg[i], 1);
+			if (all)
+				IOLog("B2L BATTERY: charger regs (external=%d) dtls02=0x%x dtls03=0x%x cnfg00..12 = %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+				    external, cfg[0], cfg[1], cfg[2], cfg[3], cfg[4], cfg[5], cfg[6], cfg[7], cfg[8], cfg[9], cfg[10], cfg[11],
+				    cfg[12], cfg[13], cfg[14]);
+			fLastExternal = external;
 		}
 		/* One line when the level or the charger state changes (the first two always), not every poll. */
 		uint32_t chgState = (uint32_t)intok << 16 | (uint32_t)dtls0 << 8 | dtls;

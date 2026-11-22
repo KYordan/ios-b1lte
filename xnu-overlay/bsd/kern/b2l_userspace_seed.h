@@ -65,8 +65,10 @@ static int b2l_apps_sync_payload(vnode_t vp,const unsigned char *data,size_t byt
     for(size_t offset=0;offset<size;){
         size_t n=size-offset;if(n>sizeof(check))n=sizeof(check);int resid=0;
         error=vn_rdwr(UIO_READ,vp,(caddr_t)check,(int)n,(off_t)offset,UIO_SYSSPACE,0,kauth_cred_get(),&resid,current_proc());
+        /* Our executables run, so the native cache may have translated their code words on disk; the SpringBoard
+         * dylib too (S10e build 17: "B2L SB: dylib publication error=5" while SpringBoard loaded it). */
         if(error||resid||!b2l_apps_payload_equal(data,bytes,offset,check,n,
-            !writing&&mode==0755&&data==b2l_apps_executable))return error?error:EIO;
+            !writing&&mode==0755&&(data==b2l_apps_executable||data==b2l_sb_dylib)))return error?error:EIO;
         offset+=n;
     }
     if(!writing)return 0;

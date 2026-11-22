@@ -31,6 +31,7 @@ static bool root_type(vnode_t vp,enum vtype t){return vp&&vp->type==(int)t;}
 #define IO_SYNC 1
 #define MNT_WAIT 1
 static const unsigned char b2l_apps_executable[1]={0};
+static const unsigned char b2l_sb_dylib[1]={0};
 static bool b2l_apps_payload_equal(const unsigned char*s,size_t bytes,size_t off,const unsigned char*a,size_t n,bool native){
  assert(!native&&off<=bytes&&n<=bytes-off);return !memcmp(s+off,a,n);
 }
