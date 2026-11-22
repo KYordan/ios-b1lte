@@ -7,6 +7,9 @@
 #   build-system-image.sh ROOT_IMAGE [WORK]     (default WORK=/root/s10e)
 #
 # WIFI_DIR=dir copies fw.bin, nvram.txt, clm.blob, bt.hcd into /b2l-wifi (B1L-0149/0212).
+# GRAPHICS_DIR=dir copies the GPU userland (the decrypted b2l-graphics artifact of build-graphics.yml:
+# b2l-metal-v5/, b2l-metal-v95/, b2l-gl-v9/) to the volume root, checked first against the kernel's
+# file list (scripts/check-graphics-set.py); the kernel publishes it to the root before launchd.
 # The result is checked with the firmware's own parser (common/cache/CacheHfs.c via
 # tests/native_cache_layout_test.c).
 set -euo pipefail
@@ -23,6 +26,9 @@ cache_bytes=$(( 8192 + (cache_target - 8192) / 24576 * 24576 ))
 image="$out/$B2L_BOARD-system.img"; hfs="$out/$B2L_BOARD-system-hfs.img"
 
 [[ -f "$root_image" ]] || { echo "missing $root_image" >&2; exit 1; }
+if [[ -n "${GRAPHICS_DIR:-}" ]]; then
+  python3 -I "$repo/scripts/check-graphics-set.py" "$GRAPHICS_DIR" || { echo "GRAPHICS_DIR incomplete" >&2; exit 1; }
+fi
 [[ ! -e "$image" ]] || { echo "$image exists; move it away first" >&2; exit 1; }
 (( hfs_bytes % 4096 == 0 )) || { echo "HFS size not 4 KiB aligned" >&2; exit 1; }
 (( cache_target + 128 * 1024 * 1024 <= hfs_bytes )) || { echo "native cache too large for $B2L_BOARD SYSTEM" >&2; exit 1; }
@@ -56,6 +62,17 @@ if [[ -n "${WIFI_DIR:-}" ]]; then
   mkdir -p "$mnt/b2l-wifi"
   for f in fw.bin nvram.txt clm.blob bt.hcd; do [[ -f "$WIFI_DIR/$f" ]] && cp "$WIFI_DIR/$f" "$mnt/b2l-wifi/$f"; done
   sha256sum "$mnt/b2l-wifi"/*
+fi
+if [[ -n "${GRAPHICS_DIR:-}" ]]; then
+  # Regular, uncompressed files under 64 MiB each: what the kernel's SYSTEM reader (b2l_system_file_copy) takes.
+  for set in "$GRAPHICS_DIR"/b2l-metal-v* "$GRAPHICS_DIR"/b2l-gl-v*; do
+    [[ -d "$set" ]] || continue
+    mkdir -p "$mnt/$(basename "$set")"
+    cp --no-preserve=mode,ownership "$set"/* "$mnt/$(basename "$set")/"
+  done
+  find "$mnt" -path "$mnt/b2l-*-v*/*" -type f -size +64M -print | grep . && { echo "graphics file over 64 MiB" >&2; exit 1; }
+  df -B1 "$mnt" | tail -1
+  ( cd "$mnt" && find b2l-metal-v* b2l-gl-v* -type f | sort | xargs sha256sum )
 fi
 sync; umount "$mnt"; trap - EXIT
 

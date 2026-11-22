@@ -27,10 +27,17 @@ widgets and some glyphs drawn by RenderBox (SwiftUI) inside SpringBoard.
 - Output: the `b2l-metal-v95` set the kernel publishes (`b2l_exec_graphics_diag.h`). Our code and Mesa only, no Apple
   binary; still in the encrypted artifact, like the kernel.
 - Done when: the set builds in CI and its file list matches what the kernel publishes.
+- **Written (build 18):** [build-graphics.yml](../../.github/workflows/build-graphics.yml) builds Mesa (release,
+  Scion patches at `a6f4bc38`), `b2l-metal-v5` (B2LMetalV3), `b2l-metal-v95` (B2LMetalv95) and `b2l-gl-v9` with the S10's
+  scripts, then [check-graphics-set.py](../../scripts/check-graphics-set.py) compares the output with the 12 files
+  `b2l_userspace_seed.h` publishes and checks every `otool -L` dependency. Artifact `b2l-graphics-N`, encrypted.
+  Not run yet. The build 17 log shows why it matters: `B2LMetalV3` is the first file the kernel looks for, so the
+  whole publication stops there (`error=2`).
 
 ### 2. The set on SYSTEM, backboardd on the GPU
 
-- `tools/b1l/linux/build-system-image.sh` copies the set into SYSTEM next to the native cache.
+- `tools/b1l/linux/build-system-image.sh` copies the set into SYSTEM next to the native cache
+  (`GRAPHICS_DIR=<decrypted b2l-graphics artifact>`, with `WIFI_DIR` as before, since SYSTEM is rebuilt whole).
 - SYSTEM (`sda25`) rewritten once; USERDATA (the iOS data) unchanged.
 - Nothing to switch on in the kernel: `b2l_metal_ui` is already on by default (`B2LMetalAccel.cpp` announces
   `B2LMetalv95`); the plug-in is simply missing today. `b2l_metal_ui=0` stays the kill switch, and backboardd falls

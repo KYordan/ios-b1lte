@@ -1,0 +1,117 @@
+# Build the GPU userland the kernel publishes from SYSTEM (docs/plans/s10e-metal.md, step 1) on a
+# GitHub macOS runner: Mesa 25.0.7 (panfrost, Bifrost compiler) with the Scion/HakiOS patches, the
+# Metal sets b2l-metal-v5 (B2LMetalV3, the CPU-renderer plug-in and fallback) and b2l-metal-v95
+# (Scion's Mali driver, the B2LMetalv95 plug-in backboardd draws with), and the EAGL set b2l-gl-v9.
+# Same scripts and same set names as the S10 build on a Mac (scripts/build-mesa.sh, build-metal.sh,
+# build-metal-scion.sh, build-gl.sh); Mesa is built with its assertions off (release).
+#
+# The output holds our code and Mesa only, no Apple binary. Like the kernel it is uploaded inside a
+# 7z archive encrypted with the B2L_ARTIFACT_PASSWORD secret. tools/b1l/linux/build-system-image.sh
+# copies it into SYSTEM (GRAPHICS_DIR=); scripts/check-graphics-set.py compares it with the file list
+# of xnu-overlay/bsd/kern/b2l_userspace_seed.h.
+name: Build GPU userland (Mesa + Metal)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [beyond0lte]
+    paths:
+      - 'userspace/**'
+      - 'scripts/build-mesa.sh'
+      - 'scripts/build-metal.sh'
+      - 'scripts/build-metal-scion.sh'
+      - 'scripts/build-gl.sh'
+      - 'scripts/unsign-branches.py'
+      - 'scripts/check-graphics-set.py'
+      - 'xnu-overlay/bsd/kern/b2l_userspace_seed.h'
+      - '.github/workflows/build-graphics.yml'
+
+env:
+  SCION_REPO: https://github.com/Scion-Project/hackios-xnu-kernel.git
+  SCION_COMMIT: a6f4bc38aa244359cd365c976244a88c9d6b3304   # userspace/metal/scion/SCION-COMMIT
+
+jobs:
+  build:
+    name: Mesa + Metal sets (iOS 26 arm64e)
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - name: Artifact password present
+        env:
+          B2L_ARTIFACT_PASSWORD: ${{ secrets.B2L_ARTIFACT_PASSWORD }}
+        run: |
+          [[ ${#B2L_ARTIFACT_PASSWORD} -ge 12 ]] || {
+            echo "::error::Set the B2L_ARTIFACT_PASSWORD repository secret (12+ characters)."
+            exit 1; }
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          brew update
+          brew install meson ninja bison flex sevenzip
+          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+
+      - name: Scion reference (pinned)
+        run: |
+          git init -q out/scion
+          git -C out/scion fetch -q --depth 1 "$SCION_REPO" "$SCION_COMMIT"
+          git -C out/scion checkout -q FETCH_HEAD
+          ls out/scion/tools/mesa/*.patch out/scion/userland/mkeagl.py
+          {
+            echo "HAKIOS=$GITHUB_WORKSPACE/out/scion"
+            echo "MESA_BUILD=$GITHUB_WORKSPACE/out/build-mesa"
+            echo "MESA_OUT=$GITHUB_WORKSPACE/out/build-mesa/out"
+            echo "GL_BUILD=$GITHUB_WORKSPACE/out/build-gl"
+          } >> "$GITHUB_ENV"
+
+      - name: Mesa 25.0.7 (panfrost, libOSMesa, libhakiosair)
+        run: |
+          bison --version | head -1; flex --version
+          bash scripts/build-mesa.sh || { tail -n 80 "$MESA_BUILD/meson-setup.log" "$MESA_BUILD/ninja.log" 2>/dev/null; exit 1; }
+
+      - name: b2l-metal-v5 (B2LMetalV3, CPU-renderer plug-in)
+        run: V=b2l-metal-v5 BUNDLE=B2LMetalV3 bash scripts/build-metal.sh
+
+      - name: b2l-metal-v95 (Scion Mali driver, B2LMetalv95 plug-in)
+        run: V=b2l-metal-v95 bash scripts/build-metal-scion.sh
+
+      - name: b2l-gl-v9 (EAGL bridge)
+        run: V=b2l-gl-v9 bash scripts/build-gl.sh
+
+      - name: Collect and check against the kernel's file list
+        run: |
+          set -euo pipefail
+          g=out/graphics; rm -rf "$g"; mkdir -p "$g"
+          cp -R ~/Developer/s10-port/build-metal/b2l-metal-v5 "$g/"
+          cp -R ~/Developer/s10-port/build-metal/b2l-metal-v95 "$g/"
+          cp -R "$GL_BUILD/b2l-gl-v9" "$g/"
+          python3 scripts/check-graphics-set.py --list
+          python3 scripts/check-graphics-set.py "$g"
+          for f in $(find "$g" -type f ! -name '*.plist'); do echo "== $f"; otool -L "$f" | tail -n +2; done
+          (cd "$g" && find . -type f | sort | xargs shasum -a 256) | tee out/graphics-SHA256SUMS
+          cp out/graphics-SHA256SUMS "$g/SHA256SUMS"
+
+      - name: Encrypt (7z AES-256, encrypted file names)
+        env:
+          B2L_ARTIFACT_PASSWORD: ${{ secrets.B2L_ARTIFACT_PASSWORD }}
+        run: |
+          cd out/graphics
+          7zz a -t7z -mhe=on -p"$B2L_ARTIFACT_PASSWORD" ../b2l-graphics.7z . >/dev/null
+          7zz t -p"$B2L_ARTIFACT_PASSWORD" ../b2l-graphics.7z >/dev/null
+          ls -l ../b2l-graphics.7z
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: b2l-graphics-${{ github.run_number }}
+          retention-days: 30
+          if-no-files-found: error
+          compression-level: 0
+          path: |
+            out/b2l-graphics.7z
+            out/graphics-SHA256SUMS

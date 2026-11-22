@@ -51,7 +51,7 @@ Tested on the phone unless marked otherwise. Build numbers are GitHub Actions ru
 | **Battery** | ✅ Works | Level shown in Settings and the status bar since build 13 (`B2LBattery`: MAX77705 fuel gauge; the driver sets up the bus the bootloader leaves unconfigured: USI mode, pins, timings). Charging shown on USB (build 16); about 4 W, no fast-charge negotiation yet |
 | **Display sleep** | ✅ Works | Power button and wake since build 17: backboardd's `RequestPowerChange` (IOMobileFramebuffer selector 12, found in the 23G90 dyld cache) turns the panel black and holds swaps. The panel itself stays powered (no DSI control yet) |
 | **Storage size** | 🚧 Build 18, not tested | *Capacity* read "Zero KB": MobileGestalt reads `Size` of the registry entry named `disk0`, which did not exist. Build 18 publishes `B2LDisk` (`disk0`) with the real UFS size; *Available* was already right |
-| **GPU (Metal)** | ❌ Not on the S10e yet | The Mali-G76 comes up and runs test jobs; the S10e SYSTEM image does not carry the Metal userland yet. Plan: [docs/plans/s10e-metal.md](docs/plans/s10e-metal.md) (the S10 already draws its interface on the GPU: [metal-progress.md](docs/gpu/metal-progress.md)) |
+| **GPU (Metal)** | ❌ Not on the S10e yet | The Mali-G76 comes up and runs test jobs; the S10e SYSTEM image does not carry the Metal userland yet. Since build 18 it is built on GitHub Actions ([build-graphics.yml](.github/workflows/build-graphics.yml)) and `build-system-image.sh` takes it with `GRAPHICS_DIR=`. Plan: [docs/plans/s10e-metal.md](docs/plans/s10e-metal.md) (the S10 already draws its interface on the GPU: [metal-progress.md](docs/gpu/metal-progress.md)) |
 | **Audio, Bluetooth** | ⏸️ Parked | As on the S10 |
 | **Camera, cellular, fingerprint** | ❌ Not started | |
 
