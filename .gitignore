@@ -45,4 +45,7 @@ dyld_shared_cache*
 device-s10e/
 # Decrypted CI boot artifacts: the kernel embeds IPSW-derived data
 beyond0lte-boot/
+beyond0lte-boot-*/
 *-boot/mach.development.b2l
+# Decrypted CI GPU userland (build-graphics.yml), copied into SYSTEM by build-system-image.sh
+b2l-graphics/
