@@ -29,7 +29,7 @@ on:
         options: [macos-15, macos-26]
         default: macos-15
   push:
-    branches: [beyond0lte]
+    branches: [beyond0lte, windows-dualboot]
     paths:
       - 'xnu-overlay/**'
       - 'patches/**'
