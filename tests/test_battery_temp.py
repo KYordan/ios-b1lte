@@ -43,7 +43,21 @@ int main() {
   assert(b2l_charge_allowed(&g, 300, B2L_TEMP_UNKNOWN, 300) == 0);
   assert(b2l_charge_allowed(&g, 300, 300, B2L_TEMP_UNKNOWN) == 0);
   assert(b2l_charge_allowed(&g, 300, 300, 300) == 1);
-  puts("battery temperature: S10e DTB tables, unknown ends, charge limits with hysteresis passed");
+  // build 32: currents by cable type and temperature; encodings as Samsung's driver
+  unsigned in, cc;
+  b2l_charge_limits(0x83, 300, 1, &in, &cc); assert(in == 1500 && cc == 1000);   // wall charger
+  b2l_charge_limits(0x82, 300, 1, &in, &cc); assert(in == 1500 && cc == 1000);   // charging host
+  b2l_charge_limits(0x81, 300, 1, &in, &cc); assert(in == 0 && cc == 0);         // computer port: S-Boot's
+  b2l_charge_limits(0x80, 300, 1, &in, &cc); assert(in == 0 && cc == 0);         // unknown type
+  b2l_charge_limits(0x03, 300, 1, &in, &cc); assert(in == 0 && cc == 0);         // no VBUS
+  b2l_charge_limits(0x83, 300, 0, &in, &cc); assert(in == 0 && cc == 0);         // not allowed
+  b2l_charge_limits(0x83, 149, 1, &in, &cc); assert(in == 0 && cc == 0);         // cool
+  b2l_charge_limits(0x83, 411, 1, &in, &cc); assert(in == 0 && cc == 0);         // warm
+  b2l_charge_limits(0x83, B2L_TEMP_UNKNOWN, 1, &in, &cc); assert(in == 0);
+  assert(b2l_chg_cnfg09(0x0f, 400) == 0x0f);                                     // S-Boot's 400 mA
+  assert(b2l_chg_cnfg09(0x0f, 1500) == 0x3b && b2l_chg_cnfg09(0x8f, 1500) == 0xbb);
+  assert(b2l_chg_cnfg02(0x49, 450) == 0x49 && b2l_chg_cnfg02(0x49, 1000) == 0x54);
+  puts("battery temperature: S10e DTB tables, unknown ends, charge limits with hysteresis, cable currents passed");
 }
 '''
 with tempfile.TemporaryDirectory() as td:

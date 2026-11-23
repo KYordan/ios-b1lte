@@ -82,6 +82,53 @@ class B2LBattery : public IOPMPowerSource {
 	struct b2l_charge_gate fGate;
 	bool                fGateLogged, fGateWas, fKickOn;
 	unsigned            fKicks, fKickFails, fExpiredSeen;
+	/* build 32: input / charge current (B2LBatteryTemp.h b2l_charge_limits) */
+	bool                fLimOn, fLimOff, fBootSaved;
+	uint8_t             fBoot02, fBoot09;
+	unsigned            fLimIn, fLimLogs;
+
+	bool writeCheck(uint8_t reg, uint8_t value)
+	{
+		uint8_t back = 0;
+		return writeReg(B2L_BAT_CHG, reg, value) && readRegs(B2L_BAT_CHG, reg, &back, 1) && back == value;
+	}
+
+	/* S-Boot's values without a wall charger / charging host or outside 15..41 C, 1500 / 1000 mA with one. Every
+	 * write is read back; a mismatch puts S-Boot's values back and switches this off until the next boot. */
+	void applyLimits(bool external, bool allowed)
+	{
+		if (!fLimOn || fLimOff) return;
+		if (!fBootSaved) {
+			if (!readRegs(B2L_BAT_CHG, 0xB9, &fBoot02, 1) || !readRegs(B2L_BAT_CHG, 0xC0, &fBoot09, 1)) return;
+			fBootSaved = true;
+			IOLog("B2L BATTERY: S-Boot's limits CNFG_02 0x%x (%u mA charge), CNFG_09 0x%x (%u mA in)\n", fBoot02,
+			    (fBoot02 & 0x3fu) * 50u, fBoot09, ((fBoot09 & 0x7fu) + 1u) * 25u);
+		}
+		uint8_t bc = 0;
+		if (external && !readRegs(0x25, 0x08, &bc, 1)) bc = 0;   /* USB-C firmware BC_STATUS */
+		unsigned in = 0, cc = 0;
+		b2l_charge_limits(bc, fTemp[0], allowed, &in, &cc);
+		if (in == fLimIn) return;
+		uint8_t old02 = fBoot02, old09 = fBoot09;
+		if (in) {
+			readRegs(B2L_BAT_CHG, 0xB9, &old02, 1);
+			readRegs(B2L_BAT_CHG, 0xC0, &old09, 1);
+		}
+		uint8_t w02 = in ? b2l_chg_cnfg02(old02, cc) : fBoot02, w09 = in ? b2l_chg_cnfg09(old09, in) : fBoot09;
+		bool ok = writeCheck(0xB9, w02) && writeCheck(0xC0, w09);
+		if (!ok) {
+			fLimOff = true;
+			writeReg(B2L_BAT_CHG, 0xB9, fBoot02);
+			writeReg(B2L_BAT_CHG, 0xC0, fBoot09);
+			in = 0;
+		}
+		fLimIn = in;
+		if (fLimLogs++ < 40) {
+			IOLog("B2L BATTERY: limits %s: in %u mA, charge %u mA (bc 0x%x, battery %d dC) CNFG_02 0x%x CNFG_09 0x%x\n",
+			    !ok ? "WRITE NOT READ BACK, S-Boot's again, off" : in ? "raised" : "S-Boot's", in ? in : ((fBoot09 & 0x7fu) + 1u) * 25u,
+			    in ? cc : (fBoot02 & 0x3fu) * 50u, bc, fTemp[0], w02, w09);
+		}
+	}
 
 	/* Exynos ADC v3, one polled conversion; -1 when it does not finish in 2 ms. */
 	int adcRead(unsigned ch)
@@ -272,6 +319,7 @@ class B2LBattery : public IOPMPowerSource {
 			    allowed ? "" : ": ", allowed ? "" : fGate.why);
 		}
 		if (fKickOn && haveChg && external && allowed) kickWatchdog(state);
+		if (fKickOn && haveChg) applyLimits(external, allowed);
 		bool charging = external && (haveChg ? state <= 2 : mA > 0);
 		bool full = external && ((haveChg && (state == 3 || state == 4)) || percent >= 100);
 
@@ -418,6 +466,9 @@ public:
 		PE_parse_boot_argn("b2l_chg_wdt", &kick, sizeof(kick));
 		bool adc = adcSetup();
 		fKickOn = kick && adc;   /* no thermistors: no kick, the charger stays stopped as before */
+		uint32_t ilim = 1;
+		PE_parse_boot_argn("b2l_chg_ilim", &ilim, sizeof(ilim));
+		fLimOn = ilim != 0;
 		IOLog("B2L BATTERY: thermistors %s, charger watchdog kick %s\n", adc ? "on the ADC" : "UNAVAILABLE",
 		    fKickOn ? "on (within the temperature limits)" : kick ? "off (no thermistors)" : "off (b2l_chg_wdt=0)");
 		fTimer->setTimeoutMS(3000);

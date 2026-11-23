@@ -73,4 +73,36 @@ b2l_charge_allowed(struct b2l_charge_gate *g, int bat, int chg, int usb)
 	}
 	return g->allowed;
 }
+
+/* S10e build 32: input and charge current (mA) for a cable, 0 = S-Boot's own values (CNFG_09 0x0f = 400 mA in,
+ * CNFG_02 CC 9 = 450 mA). bc = the MAX77705 USB-C firmware's BC_STATUS (I2C 0x25, reg 0x08): bit 7 VBUS, bits 1:0
+ * BC1.2 type 0 none, 1 USB host (SDP, 500 mA by the USB spec), 2 charging host (CDP, 1.5 A), 3 wall charger (DCP).
+ * Samsung's S10e DTB: default_input_current 1800, default_charging_current 2100, swelling 1050 mA from 41 C, 700 mA
+ * below 15 C; ours: 1500 in / 1000 charge from a CDP or DCP with the battery at 15..41 C, S-Boot's values otherwise
+ * (charging itself is stopped outside 7..42/45 C by b2l_charge_allowed). After Jesvi-iOS's bms_ilim (S20). */
+#define B2L_CHG_IN_MA      1500
+#define B2L_CHG_CC_MA      1000
+static inline void
+b2l_charge_limits(unsigned bc, int bat, int allowed, unsigned *in_ma, unsigned *cc_ma)
+{
+	unsigned type = bc & 3u;
+	*in_ma = *cc_ma = 0;
+	if (!allowed || !(bc & 0x80u) || (type != 2 && type != 3) || bat == B2L_TEMP_UNKNOWN || bat < 150 || bat > 410) {
+		return;
+	}
+	*in_ma = B2L_CHG_IN_MA;
+	*cc_ma = B2L_CHG_CC_MA;
+}
+
+/* Samsung's max77705_set_input_current / _set_charge_current encodings, other bits kept */
+static inline uint8_t
+b2l_chg_cnfg09(uint8_t old, unsigned in_ma)
+{
+	return (uint8_t)((old & 0x80u) | ((in_ma / 25u - 1u) & 0x7fu));
+}
+static inline uint8_t
+b2l_chg_cnfg02(uint8_t old, unsigned cc_ma)
+{
+	return (uint8_t)((old & 0xc0u) | ((cc_ma / 50u) & 0x3fu));
+}
 #endif
