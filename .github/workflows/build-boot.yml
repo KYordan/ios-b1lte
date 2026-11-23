@@ -26,8 +26,8 @@ on:
       runner:
         description: macOS runner image
         type: choice
-        options: [macos-15, macos-26]
-        default: macos-15
+        options: [macos-15-intel, macos-15, macos-26]
+        default: macos-15-intel
   push:
     branches: [beyond0lte, windows-dualboot]
     paths:
@@ -63,7 +63,10 @@ env:
 jobs:
   build:
     name: XNU + ${{ inputs.board || 'beyond0lte' }} UEFI + boot.img
-    runs-on: ${{ inputs.runner || 'macos-15' }}
+    # Intel by default since 2026-11-24: the arm64 macOS runners were out of capacity ("The job was not acquired by
+    # Runner of type hosted even after multiple attempts", build 34). Every step builds for arm64 with Xcode, so the
+    # host architecture does not matter; pick macos-15 / macos-26 in Run workflow for an Apple-silicon runner.
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
     timeout-minutes: 150
     env:
       B2L_BOARD: ${{ inputs.board || 'beyond0lte' }}
