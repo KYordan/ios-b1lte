@@ -4,7 +4,16 @@ Agreed 2026-11-22. Its precondition is met: power off, battery and display sleep
 the next large step (after the small storage-size fix). The S10's history is in
 [docs/gpu/metal-progress.md](../gpu/metal-progress.md); the S10's speed plan in [speed-and-m6.md](speed-and-m6.md).
 
-## Where the S10e stands (boot 12 log)
+## Update (23 November 2026, builds 21–33)
+
+Steps 1 and 2 are done. Since build 21 (SYSTEM with the `b2l-graphics` set from GitHub Actions) all 12 files are
+published, `IOAcceleratorES` announces `MetalPluginName B2LMetalv95`, and backboardd, SpringBoard and
+iconservicesagent draw on the Mali (build 21: 7 GPU clients, 4956 job chains, 0 failed; fragment jobs 0.4–1.3 ms).
+Build 22 fixed the black flicker (64-byte rows for the scaled client surface); build 24 made the CPU copy of the
+finished frame to the panel cheap (~9 ms, a row buffer instead of reading write-combined memory). Still open: step 3
+(no CPU copy: the canvas is 880 × 1912 scaled to 1080 × 2280, so zero copy is off) and apps' own Metal/OpenGL ES.
+
+## Where the S10e stood before (boot 12 log)
 
 | Point | State |
 | --- | --- |

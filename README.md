@@ -8,7 +8,7 @@ Apple's open-source XNU kernel running on a Galaxy S10e and booting the **unmodi
 
 This branch is the S10e port. It shares the kernel, drivers and loader with the Galaxy S10 port on [`main`](https://github.com/KYordan/ios-s10e/tree/main) (`beyond1lte`, SM-G973F) and adds the S10e board profile, its 6 GB memory map, the 1080 × 2280 display, a Linux/WSL image pipeline and a GitHub Actions build, so **no Mac is needed**.
 
-**Today (23 November 2026, build 33):** the S10e boots to the iOS 26 lock screen and home screen, full screen and smooth, with touch (screen-protector mode), Wi-Fi, **sound** through the speaker and headphones, **display brightness** from the iOS slider, Safari (JavaScript without JIT), battery level and temperatures, power off and display sleep. In progress: charging under iOS (builds 30–33), Settings panes that hang (Date & Time waits on `locationd`), Bluetooth devices, then [Metal on the GPU](docs/plans/s10e-metal.md). See [What works](#status-on-the-s10e) and [Working on now](#working-on-now).
+**Today (23 November 2026, build 33):** the S10e boots to the iOS 26 lock screen and home screen, full screen and smooth, drawn by the **Mali GPU through Metal**, with touch (screen-protector mode), Wi-Fi, **sound** through the speaker, wired and **Bluetooth headphones**, **display brightness** from the iOS slider, Safari (JavaScript without JIT), battery level and temperatures, power off and display sleep. In progress: charging under iOS (builds 30–33) and Settings panes that hang (Date & Time waits on `locationd`). See [What works](#status-on-the-s10e) and [Working on now](#working-on-now).
 
 > [!WARNING]
 > Experimental research project, not a product. Apple's security policies (AMFI, code signing, Secure Enclave) are relaxed for hardware bring-up. Installing iOS **erases Android** (`system` and `userdata` are overwritten), and a wrong partition write can brick the phone. Back up first (see [Installing](#installing)).
@@ -26,7 +26,7 @@ This branch is the S10e port. It shares the kernel, drivers and loader with the 
 | **Touchscreen** | Samsung `sec_ts` Y761 (`hsi2c@104B0000`) | `B2LInput` HID digitizer, glove mode for screen protectors |
 | **Audio** | ABOX + 2× Cirrus CS35L40 amplifiers | `B2LAudio.h` + `/dev/hakios-audio`; HakiOS's AudioServerPlugIn built in CI and carried by the kernel |
 | **Bluetooth** | Broadcom BCM4375 (UART) | `B2LBluetooth` + `com.b2l.bluetooth` control for `bluetoothd` |
-| **GPU** | ARM Mali-G76 MP12 | `B2LMaliService` (from HakiOS) + Mesa + Metal driver; not active on the S10e yet |
+| **GPU** | ARM Mali-G76 MP12 | `B2LMaliService` (from HakiOS) + Mesa + Metal driver (`B2LMetalv95`), drawing the interface since build 21 |
 | **Wi-Fi** | Broadcom BCM4375 (PCIe) | `B2LWifi` + `apple80211` bridge for `wifid` |
 | **Battery / charger** | MAX77705 fuel gauge and charger (`hsi2c@15D60000`); NTC thermistors on the Exynos ADC (`0x15C40000`) | `B2LBattery` (`IOPMPowerSource`), `B2LBatteryTemp.h` (temperatures, charge limits) |
 | **PMIC / power** | S2MPS19 via the APM firmware (ACPM) | RTC clock, WTSR/SMPL, ACPM stop, PMU `PS_HOLD` / `SWRESET` |
@@ -50,7 +50,7 @@ Tested on the phone unless marked otherwise. Build numbers are GitHub Actions ru
 | **Touch** | ✅ Works | sec_ts Y761; glove mode (build 24) for screen protectors |
 | **Volume buttons** | 🚧 Partial | Volume up/down reach iOS (HID 0xE9/0xEA); with audio (build 28) the volume change itself is not confirmed yet |
 | **Audio** | ✅ Works | Build 28/29: speaker and headphones heard. Port of malthiscode/ios-b1lte's S10 audio (ABOX path kept open, `/dev/hakios-audio`, D94AP model and `/product` acoustic-id for audiomxd, 40 µs real-time floor); the HakiOS plug-in is built in CI and published by the kernel, no SYSTEM rebuild. No microphone yet |
-| **Bluetooth** | 🚧 Partial | Build 28: the BCM4375 runs its firmware and `bluetoothd` reaches it (BlueTool stand-in, vendor HCI replies, Skywalk pipe for A2DP); devices and headphones not tested on the S10e yet |
+| **Bluetooth** | ✅ Works | Build 28/29: Bluetooth headphones pair and play sound (A2DP). The BCM4375 runs its firmware and `bluetoothd` reaches it (BlueTool stand-in, vendor HCI replies, Skywalk pipe for A2DP). Other device types not tested |
 | **Wi-Fi** | ✅ Works | Joins a WPA2 network. Build 31: firmware roaming off (a roam needed a new handshake and the router dropped us ~13 s after joining, so Safari loaded nothing) |
 | **Safari / WebKit** | 🚧 Partial | Build 23: no more freeze (JavaScriptCore without JIT, patch 0110). Pages to be tested again with build 31's Wi-Fi fix |
 | **Clock** | ✅ Works | Time from the PMIC RTC |
@@ -63,7 +63,7 @@ Tested on the phone unless marked otherwise. Build numbers are GitHub Actions ru
 | **Charging under iOS** | 🚧 In progress | The charger's watchdog ran out a minute after boot, so the phone never charged (builds ≤ 29). Build 30 kicks it (as Samsung's driver) within temperature limits; build 32 raises S-Boot's 400/450 mA to 1500 mA in / 1000 mA charge on a wall charger; build 33 lowers the input to 1000 mA when the charger is hot (≥ 46 °C) instead of stopping. Build 33 not tested yet |
 | **Display sleep** | ✅ Works | Power button and wake: backboardd's `RequestPowerChange` turns the panel black and holds swaps. The panel itself stays powered |
 | **Storage size** | ✅ Works | Capacity 128 GB (`B2LDisk`, `disk0` with the real UFS size). "Used" counts everything outside the 32 GiB HFS root as used |
-| **GPU (Metal)** | ❌ Not on the S10e yet | The Mali-G76 comes up and runs test jobs; the S10e SYSTEM image does not carry the Metal userland yet. Built on GitHub Actions ([build-graphics.yml](.github/workflows/build-graphics.yml)). Plan: [docs/plans/s10e-metal.md](docs/plans/s10e-metal.md) |
+| **GPU (Metal)** | 🚧 Partial | Since build 21 (SYSTEM with the `b2l-graphics` set built on [GitHub Actions](.github/workflows/build-graphics.yml)): the Mali-G76 draws the interface through Metal (`MetalPluginName B2LMetalv95`); backboardd, SpringBoard and iconservicesagent are GPU clients, thousands of job chains, none failed. The finished frame is still copied and scaled to the panel by the CPU (~9 ms, because iOS draws an 880 × 1912 canvas); apps' own Metal/OpenGL ES not tested. Plan: [docs/plans/s10e-metal.md](docs/plans/s10e-metal.md) |
 | **Location, sensors, haptics, flashlight** | ❌ Not started | References: [Jesvi-iOS](https://github.com/jesvi-eulah/Jesvi-iOS) (S20, Exynos 990) |
 | **Camera, cellular, fingerprint, microphone** | ❌ Not started | |
 
@@ -72,7 +72,7 @@ Tested on the phone unless marked otherwise. Build numbers are GitHub Actions ru
 1. **Charging under iOS** (build 33): positive current on a wall charger, the input limit following the charger's temperature.
 2. **Settings panes that hang** (Date & Time…): the kernel's wait profiler follows `locationd` and names the process each blocked thread sent to (`B2L PROF DEST`), to find the service it waits on.
 3. **Safari** with the Wi-Fi fix of build 31.
-4. Next: Bluetooth devices and headphones, the microphone, then the GPU (Metal) and, after Jesvi-iOS's notes, haptics, sensors and auto-brightness.
+4. Next: the microphone; the panel's native resolution so the GPU's frame needs no CPU copy; then, after Jesvi-iOS's notes, haptics, sensors and auto-brightness.
 
 Measured device facts, partition map and the build/boot history: [docs/device-facts-beyond0lte.md](docs/device-facts-beyond0lte.md).
 
