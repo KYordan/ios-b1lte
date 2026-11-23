@@ -25,10 +25,10 @@ static const struct font big = { &spleen_32_64[0][0], SPLEEN_32_64_W, SPLEEN_32_
 static const struct font small = { &spleen_16_32[0][0], SPLEEN_16_32_W, SPLEEN_16_32_H };
 
 static const char *const labels[B2L_MENU_COUNT] = {
-    "Boot iOS", "Stay here", "Reboot to recovery", "Reboot", "Power off",
+    "Boot iOS", "Boot Windows", "Reboot to recovery", "Reboot", "Power off",
 };
 static const char *const details[B2L_MENU_COUNT] = {
-    "Start iOS 26 now", "Don't boot, wait in this menu", "Restart into TWRP", "Restart the phone",
+    "Start iOS 26 now", "Start Windows Boot Manager", "Restart into TWRP", "Restart the phone",
     "Switch the phone off",
 };
 

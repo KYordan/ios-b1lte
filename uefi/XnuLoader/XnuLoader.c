@@ -2,6 +2,7 @@
  * Eight-CPU A55/A75/M4, non-SPTM XNU ARM64 handoff for the existing beyond2lte UEFI.
  * No partition writes or synthetic entropy. UefiMain shows the boot menu (BootMenuEfi.c); B2lBootXnu loads and
  * starts XNU and returns only when it fails before ExitBootServices, with everything it allocated freed.
+ * "Boot Windows" hands over to Windows Boot Manager instead (WindowsBoot.c).
  */
 #include <Uefi.h>
 #include <Protocol/LoadedImage.h>
@@ -22,6 +23,7 @@
 #include "Progress.h"
 #include "Arena.h"
 #include "BootMenuEfi.h"
+#include "WindowsBoot.h"
 #include "b2l_secondary.h"
 extern const UINT8 B2LSecondaryTemplate[], B2LSecondaryTemplateEnd[];
 #include "b2l_cache_core.h"
@@ -461,11 +463,16 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     BOOLEAN Failed = FALSE;
     (VOID)SystemTable;
     for (;;) {
-        (VOID)B2lBootMenu(Note, Failed);
-        EFI_STATUS Status = B2lBootXnu(ImageHandle);    /* returns only on a failure before ExitBootServices */
+        EFI_STATUS Status;
+        if (B2lBootMenu(Note, Failed) == B2L_CHOICE_WINDOWS) {
+            Status = B2lBootWindows(ImageHandle);       /* returns only when Windows Boot Manager did not start or came back */
+            Note = "Windows did not start (see the message shown before this menu). Automatic boot is off.";
+        } else {
+            Status = B2lBootXnu(ImageHandle);           /* returns only on a failure before ExitBootServices */
+            Note = "The last boot failed (see the message shown before this menu). Automatic boot is off.";
+        }
         B2lBootFailed(Status);
         if (gST->ConIn == NULL) return Status;          /* no keypad: hand back to the firmware as before */
-        Note = "The last boot failed (see the message shown before this menu). Automatic boot is off.";
         Failed = TRUE;
     }
 }

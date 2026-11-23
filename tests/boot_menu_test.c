@@ -23,8 +23,8 @@ main(void)
     assert(b2l_menu_event(&m, B2L_KEY_UP, 100) == B2L_ACT_REDRAW && m.selected == B2L_MENU_POWEROFF && !m.counting);
     assert(b2l_menu_event(&m, B2L_KEY_NONE, 60000) == B2L_ACT_NONE);      /* no boot after a key */
     assert(b2l_menu_event(&m, B2L_KEY_DOWN, 200) == B2L_ACT_REDRAW && m.selected == B2L_MENU_BOOT);
-    assert(b2l_menu_event(&m, B2L_KEY_DOWN, 400) == B2L_ACT_REDRAW && m.selected == B2L_MENU_HOLD);
-    assert(b2l_menu_event(&m, B2L_KEY_SELECT, 500) == B2L_ACT_HOLD);
+    assert(b2l_menu_event(&m, B2L_KEY_DOWN, 400) == B2L_ACT_REDRAW && m.selected == B2L_MENU_WINDOWS);
+    assert(b2l_menu_event(&m, B2L_KEY_SELECT, 500) == B2L_ACT_WINDOWS);
     assert(b2l_menu_event(&m, B2L_KEY_DOWN, 700) == B2L_ACT_REDRAW && m.selected == B2L_MENU_RECOVERY);
     assert(b2l_menu_event(&m, B2L_KEY_SELECT, 800) == B2L_ACT_RECOVERY);
     assert(b2l_menu_event(&m, B2L_KEY_DOWN, 1000) == B2L_ACT_REDRAW && m.selected == B2L_MENU_REBOOT);
@@ -45,9 +45,14 @@ main(void)
     assert(b2l_menu_event(&m, B2L_KEY_UP, 10) == B2L_ACT_REDRAW && m.selected == 3);
 
     /* BACK only stops the countdown. */
-    b2l_menu_init(&m, B2L_MENU_HOLD, 5000, B2L_START_NORMAL, 0);
-    assert(b2l_menu_event(&m, B2L_KEY_BACK, 10) == B2L_ACT_REDRAW && m.selected == B2L_MENU_HOLD && !m.counting);
+    b2l_menu_init(&m, B2L_MENU_WINDOWS, 5000, B2L_START_NORMAL, 0);
+    assert(b2l_menu_event(&m, B2L_KEY_BACK, 10) == B2L_ACT_REDRAW && m.selected == B2L_MENU_WINDOWS && !m.counting);
     assert(b2l_menu_event(&m, B2L_KEY_BACK, 500) == B2L_ACT_NONE);
+
+    /* A remembered Windows only places the cursor: the countdown still boots iOS. */
+    b2l_menu_init(&m, B2L_MENU_WINDOWS, 5000, B2L_START_NORMAL, 0);
+    assert(m.selected == B2L_MENU_WINDOWS && m.counting);
+    assert(b2l_menu_event(&m, B2L_KEY_NONE, 5000) == B2L_ACT_BOOT);
 
     /* Forced starts: no countdown; volume-up start puts the cursor on recovery but does not reboot by itself. */
     b2l_menu_init(&m, B2L_MENU_BOOT, 5000, B2L_START_FORCE_MENU, 0);
@@ -59,6 +64,6 @@ main(void)
     /* An out-of-range remembered value falls back to boot. */
     b2l_menu_init(&m, 77, 5000, B2L_START_NORMAL, 0);
     assert(m.selected == B2L_MENU_BOOT);
-    puts("boot menu: countdown, wrap, select, debounce, back, forced starts PASS");
+    puts("boot menu: countdown, wrap, select, debounce, back, remembered Windows, forced starts PASS");
     return 0;
 }

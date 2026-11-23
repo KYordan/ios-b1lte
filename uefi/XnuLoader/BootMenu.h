@@ -8,13 +8,13 @@
 #include <stdint.h>
 
 enum b2l_menu_item {
-    B2L_MENU_BOOT, B2L_MENU_HOLD, B2L_MENU_RECOVERY, B2L_MENU_REBOOT, B2L_MENU_POWEROFF, B2L_MENU_COUNT
+    B2L_MENU_BOOT, B2L_MENU_WINDOWS, B2L_MENU_RECOVERY, B2L_MENU_REBOOT, B2L_MENU_POWEROFF, B2L_MENU_COUNT
 };
 enum b2l_menu_key { B2L_KEY_NONE, B2L_KEY_UP, B2L_KEY_DOWN, B2L_KEY_SELECT, B2L_KEY_BACK };
 enum b2l_menu_action {
     B2L_ACT_NONE,       /* nothing changed */
     B2L_ACT_REDRAW,     /* selection or countdown changed */
-    B2L_ACT_BOOT, B2L_ACT_HOLD, B2L_ACT_RECOVERY, B2L_ACT_REBOOT, B2L_ACT_POWEROFF
+    B2L_ACT_BOOT, B2L_ACT_WINDOWS, B2L_ACT_RECOVERY, B2L_ACT_REBOOT, B2L_ACT_POWEROFF
 };
 /* How the menu starts. FORCE_* come from a volume key held while the loader starts. */
 enum b2l_menu_start { B2L_START_NORMAL, B2L_START_FORCE_MENU, B2L_START_FORCE_RECOVERY };
@@ -32,7 +32,8 @@ struct b2l_menu {
 };
 
 /* remembered: the item chosen last time (B2L_MENU_COUNT if none). It only places the cursor: when the countdown ends
- * the menu always boots normally, so a remembered "reboot" can never loop. timeout_ms 0: no countdown. */
+ * the menu always boots iOS, so a remembered "reboot" can never loop and Windows starts only when chosen.
+ * timeout_ms 0: no countdown. */
 void b2l_menu_init(struct b2l_menu *menu, unsigned remembered, uint32_t timeout_ms, enum b2l_menu_start start,
                    uint64_t now_ms);
 /* One key (or B2L_KEY_NONE for a clock tick). Pure function of the state, the key and the time. */

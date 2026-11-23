@@ -48,7 +48,7 @@
 
 STATIC EFI_GUID mB2lMenuGuid = { 0x78da37fb, 0x7929, 0x467d, { 0xbc, 0xd8, 0xd3, 0x44, 0x2c, 0x84, 0x3d, 0x39 } };
 STATIC CONST CHAR16 *mItems[B2L_MENU_COUNT] = {
-    L"Boot iOS", L"Stay here (don't boot)", L"Reboot to recovery", L"Reboot", L"Power off",
+    L"Boot iOS", L"Boot Windows", L"Reboot to recovery", L"Reboot", L"Power off",
 };
 STATIC EFI_GRAPHICS_OUTPUT_PROTOCOL *mGop;
 STATIC UINT32 *mPixels;     /* back buffer, one GOP mode in size, kept for the loader's lifetime */
@@ -308,7 +308,7 @@ B2lBootMenu(CONST CHAR8 *Note, BOOLEAN NoCountdown)
     B2L_BOOT_CHOICE Choice = B2L_CHOICE_BOOT;
 
     if (gST->ConIn == NULL || gST->ConOut == NULL) return B2L_CHOICE_BOOT;   /* no keypad: old behaviour */
-    /* BDS arms a 5-minute watchdog for applications; "Stay here" must not end in a firmware reset. */
+    /* BDS arms a 5-minute watchdog for applications; waiting in the menu must not end in a firmware reset. */
     (VOID)gBS->SetWatchdogTimer(0, 0, 0, NULL);
     if (EFI_ERROR(gBS->CreateEvent(EVT_TIMER, 0, NULL, NULL, &Timer))) Timer = NULL;
 
@@ -323,13 +323,7 @@ B2lBootMenu(CONST CHAR8 *Note, BOOLEAN NoCountdown)
         if (Action == B2L_ACT_REDRAW) { Draw(&Menu, Now, Note, NULL); continue; }
         Remember((UINT8)Menu.selected);
         if (Action == B2L_ACT_BOOT) { Choice = B2L_CHOICE_BOOT; break; }
-        if (Action == B2L_ACT_HOLD) {
-            Draw(&Menu, Now, Note, "Not booting. Press any key for the menu.");
-            while (WaitKey(Timer, 1000) == B2L_KEY_NONE) {}
-            b2l_menu_init(&Menu, Menu.selected, 0, B2L_START_FORCE_MENU, NowMs());
-            Draw(&Menu, NowMs(), Note, NULL);
-            continue;
-        }
+        if (Action == B2L_ACT_WINDOWS) { Choice = B2L_CHOICE_WINDOWS; break; }
         if (Action == B2L_ACT_POWEROFF) {
             STATIC CHAR8 Still[96];
             STATIC CHAR8 Steps[64];

@@ -21,7 +21,12 @@ reproduce the license notice.
 Entries:
 
 1. **Boot iOS** (start iOS), selected automatically after 10 s with no key press. Build option: `-D B2L_MENU_TIMEOUT_S=n`; 0 means no automatic start.
-2. **Stay here** (do not start): the phone waits, without a watchdog. A key press returns to the menu.
+2. **Boot Windows** (dual boot, replaces the former *Stay here*): `WindowsBoot.c` looks for
+   `\EFI\Microsoft\Boot\bootmgfw.efi` on every FAT volume the firmware mounted (the Windows EFI system partition,
+   planned on `cache`, sda28) and starts it with `LoadImage`/`StartImage`, as a UEFI boot manager does. Never chosen by
+   the countdown, even when remembered. If the file is missing, refused or Windows Boot Manager returns, the message
+   stays on screen until a key, then the menu comes back without a countdown. No watchdog is armed for it (this
+   firmware's `ResetSystem` does not reset the 9820, see *Reboot*).
 3. **Reboot to recovery**: writes `INFORM3 = 0x12345674` and `SYSIP_DAT0 = 0xFF` into the PMU (`0x15860000`), then requests a reset. These are the values of the Samsung exynos9820 kernel (`drivers/samsung/sec_reboot.c`, `drivers/soc/samsung/exynos-reboot.c`). Confirmed on the S10e: it lands in TWRP.
 4. **Reboot**: like the Samsung kernel (`exynos-reboot.c`), `RST_STAT = 0` then `SWRESET (0x3A00) = 1 << 1` in the PMU; `ResetSystem(EfiResetCold)` as a fallback. The Silicium firmware reset writes `1` (the 9810 value) and does nothing on the S10 (seen in B1L-0216).
 5. **Power off**: like `exynos_power_off()`, clears bit 8 (PS_HOLD data) of `PS_HOLD_CONTROL (0x030C)` in the PMU; `ResetSystem(EfiResetShutdown)` as a fallback. With a charger connected the PMIC may keep the phone on: the menu comes back without a countdown and says so.
@@ -32,7 +37,7 @@ The kernel uses the same PMU registers for iOS's own restart and power off (`B2L
 
 - **Failure before UEFI boot services are exited** (kernel not found or invalid, memory, video, final memory map): messages stay on screen until a key is pressed. The menu then returns without a countdown, so a broken kernel is never relaunched in a loop.
 - **Failure after UEFI boot services are exited**: only the progress bar can still show anything. Red square 0 = memory map refused, red square 1 = exit refused. The processor stops; hold Power to restart.
-- **Remembered option**: this is a UEFI variable that only places the cursor. The countdown always starts iOS, so a remembered "reboot" cannot loop. On this firmware the variables live in RAM (`PcdEmuVariableNvModeEnable=TRUE`): the choice survives a return to the menu, not a restart.
+- **Remembered option**: this is a UEFI variable that only places the cursor. The countdown always starts iOS, so a remembered "reboot" cannot loop and a remembered "Boot Windows" never starts Windows by itself. On this firmware the variables live in RAM (`PcdEmuVariableNvModeEnable=TRUE`): the choice survives a return to the menu, not a restart.
 - **No partition writes.**
 - **Without keyboard or console**, the loader starts directly, as before.
 

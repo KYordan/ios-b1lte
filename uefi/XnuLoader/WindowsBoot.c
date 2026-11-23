@@ -1,0 +1,71 @@
+/* SPDX-License-Identifier: BSD-2-Clause
+ * "Boot Windows" in the boot menu: dual boot with Windows 11 ARM64 (exynos9810-woa, ported to the S10e).
+ *
+ * Windows Boot Manager is an ordinary UEFI application on the Windows EFI system partition (planned: the cache
+ * partition, FAT32). It is looked up on every FAT volume the firmware mounted and started with LoadImage/StartImage,
+ * as the firmware's own boot manager would. Nothing here writes a partition, and iOS is untouched: the menu's
+ * countdown still boots iOS, so Windows only starts when chosen.
+ *
+ * No watchdog is armed for Windows (the UEFI boot manager rule is 5 minutes): this firmware's ResetSystem does not
+ * reset the 9820 (docs/boot-menu.md), so a watchdog expiry would only hang, and a hang on screen is easier to read.
+ */
+#include <Uefi.h>
+#include <Protocol/SimpleFileSystem.h>
+#include <Library/DevicePathLib.h>
+#include <Library/MemoryAllocationLib.h>
+#include <Library/UefiBootServicesTableLib.h>
+#include <Library/UefiLib.h>
+#include "WindowsBoot.h"
+
+#define B2L_WINDOWS_BOOT_MANAGER L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi"
+
+STATIC BOOLEAN
+HasBootManager(EFI_HANDLE Volume)
+{
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *Fs;
+    EFI_FILE_PROTOCOL *Root, *File;
+    EFI_STATUS Status;
+    if (EFI_ERROR(gBS->HandleProtocol(Volume, &gEfiSimpleFileSystemProtocolGuid, (VOID **)&Fs)) ||
+        EFI_ERROR(Fs->OpenVolume(Fs, &Root)))
+        return FALSE;
+    Status = Root->Open(Root, &File, B2L_WINDOWS_BOOT_MANAGER, EFI_FILE_MODE_READ, 0);
+    if (!EFI_ERROR(Status)) File->Close(File);
+    Root->Close(Root);
+    return !EFI_ERROR(Status);
+}
+
+EFI_STATUS
+B2lBootWindows(EFI_HANDLE ImageHandle)
+{
+    EFI_HANDLE *Volumes = NULL, Volume = NULL, Image = NULL;
+    EFI_DEVICE_PATH_PROTOCOL *Path;
+    UINTN Count = 0;
+    EFI_STATUS Status;
+
+    gST->ConOut->ClearScreen(gST->ConOut);
+    Status = gBS->LocateHandleBuffer(ByProtocol, &gEfiSimpleFileSystemProtocolGuid, NULL, &Count, &Volumes);
+    if (EFI_ERROR(Status)) Count = 0;
+    for (UINTN I = 0; I < Count && Volume == NULL; I++)
+        if (HasBootManager(Volumes[I])) Volume = Volumes[I];
+    if (Volumes) FreePool(Volumes);
+    if (Volume == NULL) {
+        Print(L"Windows: %s is on none of the %u FAT volumes.\r\n", B2L_WINDOWS_BOOT_MANAGER, (UINT32)Count);
+        Print(L"The Windows EFI system partition is not set up yet.\r\n");
+        return EFI_NOT_FOUND;
+    }
+
+    Path = FileDevicePath(Volume, B2L_WINDOWS_BOOT_MANAGER);
+    if (Path == NULL) return EFI_OUT_OF_RESOURCES;
+    Print(L"Starting Windows Boot Manager...\r\n");
+    Status = gBS->LoadImage(FALSE, ImageHandle, Path, NULL, 0, &Image);
+    FreePool(Path);
+    if (EFI_ERROR(Status)) {
+        Print(L"Windows: LoadImage of %s failed: %r\r\n", B2L_WINDOWS_BOOT_MANAGER, Status);
+        return Status;
+    }
+    /* Windows Boot Manager returns only when it gives up (its own screen said why); an application is unloaded by
+     * StartImage when it returns, so there is nothing to free. */
+    Status = gBS->StartImage(Image, NULL, NULL);
+    Print(L"Windows Boot Manager returned: %r\r\n", Status);
+    return EFI_ERROR(Status) ? Status : EFI_ABORTED;
+}
