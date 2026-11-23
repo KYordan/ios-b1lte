@@ -71,6 +71,8 @@ jobs:
     env:
       B2L_BOARD: ${{ inputs.board || 'beyond0lte' }}
       B2L_ENABLE_TOUCH: ${{ (github.event_name != 'workflow_dispatch' || inputs.enable_touch) && '1' || '0' }}
+      # Dual boot (branch windows-dualboot): ACPI tables for Windows Boot Manager; XNU ignores them.
+      B2L_WINDOWS_ACPI: '1'
 
     steps:
       - name: Artifact password present

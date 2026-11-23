@@ -122,6 +122,60 @@ VOID PlatformBootManagerAfterConsole () {
                 self.assertEqual(dxe.read_text().splitlines(),
                     ["  INF beyond2ltePkg/Drivers/B2LTouchDxe/B2LTouchDxe.inf"])
 
+    ACPI_FDF = ("[FV.FvMain]\n  INF MdeModulePkg/Universal/Acpi/AcpiTableDxe/AcpiTableDxe.inf\n"
+                "  INF MdeModulePkg/Universal/Acpi/AcpiPlatformDxe/AcpiPlatformDxe.inf\n"
+                "  !include Include/ACPI.inc\n[FV.FVMAIN_COMPACT]\n")
+
+    def acpi_fixture(self, root, tables=True):
+        self.fixture(root)
+        (root / "Platforms/Samsung/beyond2ltePkg/beyond2lte.fdf").write_text(self.ACPI_FDF)
+        inc = root / "Platforms/Samsung/beyond2ltePkg/Include/ACPI.inc"
+        inc.parent.mkdir(parents=True, exist_ok=True)
+        inc.write_text("#FILE FREEFORM = 7E374E25-8E01-4FEE-87F2-390C23C606CD {\n#}\n")
+        if tables:
+            acpi = root / "Silicium-ACPI/SoCs/Samsung/S5E9820"
+            acpi.mkdir(parents=True)
+            for name in ("APIC", "DSDT_minimal", "FACP", "GTDT", "PPTT"):
+                (acpi / f"{name}.aml").write_bytes(b"table")
+        return inc
+
+    def test_xnu_profile_omits_acpi(self):
+        with tempfile.TemporaryDirectory(prefix="b2l-acpi-test-") as directory:
+            root = Path(directory)
+            self.acpi_fixture(root)
+            self.assertEqual(self.prepare(root).returncode, 0)
+            fdf = (root / "Platforms/Samsung/beyond2ltePkg/beyond2lte.fdf").read_text()
+            self.assertNotIn("AcpiPlatformDxe", fdf)
+            self.assertNotIn("!include Include/ACPI.inc", fdf)
+
+    def test_windows_acpi_keeps_drivers_and_installs_tables(self):
+        with tempfile.TemporaryDirectory(prefix="b2l-acpi-test-") as directory:
+            root = Path(directory)
+            inc = self.acpi_fixture(root)
+            command = [sys.executable, str(PREPARE), "--mu", str(root), "--loader", str(root / "Loader.efi"),
+                       "--loader-guid", GUID, "--windows-acpi"]
+            for unused in range(2):
+                result = subprocess.run(command, capture_output=True, text=True, env=self.env())
+                self.assertEqual(result.returncode, 0, result.stderr)
+            fdf = (root / "Platforms/Samsung/beyond2ltePkg/beyond2lte.fdf").read_text()
+            self.assertIn("  INF MdeModulePkg/Universal/Acpi/AcpiPlatformDxe/AcpiPlatformDxe.inf", fdf)
+            self.assertIn("  !include Include/ACPI.inc", fdf)
+            text = inc.read_text()
+            self.assertIn("\nFILE FREEFORM = 7E374E25-8E01-4FEE-87F2-390C23C606CD {", text)
+            for name in ("APIC", "DSDT_minimal", "FACP", "GTDT", "PPTT"):
+                self.assertIn(f"    SECTION RAW = S5E9820/{name}.aml", text)
+            self.assertNotIn("SSDT", text)
+
+    def test_windows_acpi_refuses_missing_tables(self):
+        with tempfile.TemporaryDirectory(prefix="b2l-acpi-test-") as directory:
+            root = Path(directory)
+            self.acpi_fixture(root, tables=False)
+            result = subprocess.run([sys.executable, str(PREPARE), "--mu", str(root), "--loader",
+                                     str(root / "Loader.efi"), "--loader-guid", GUID, "--windows-acpi"],
+                                    capture_output=True, text=True, env=self.env())
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("compiled S5E9820 tables missing", result.stderr)
+
     def test_deterministic_launch_and_idempotence(self):
         with tempfile.TemporaryDirectory(prefix="b2l-firmware-test-") as directory:
             root = Path(directory)
