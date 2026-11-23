@@ -1,0 +1,82 @@
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -2059,6 +2059,63 @@
+  * SIGKILL is taken by the first thread that does not block it, usually the main thread, and the other threads are
+  * held (sig_lock_to_exit) before proc_prepareexit, so this thread's own user stack is where it waited.
+  * Any process, 6 per boot, 24 frames; boot-arg b2l_hang_bt=0 turns it off. */
++/* S10e build 34: how long a process has lived, in ms (p_start is the microtime of its fork). */
++static uint64_t
++b2l_proc_age_ms(proc_t p)
++{
++	struct timeval now;
++	microtime(&now);
++	int64_t us = ((int64_t)now.tv_sec - (int64_t)p->p_start.tv_sec) * 1000000 +
++	    ((int64_t)now.tv_usec - (int64_t)p->p_start.tv_usec);
++	return us > 0 ? (uint64_t)us / 1000 : 0;
++}
++
++/* S10e build 34: a process that dies within 3 s of its start, with nothing else logged. Build 33: fairplayd.H2 was
++ * started 177 times in one boot; locationd's main thread waits forever in fairplayd's MIG routine 1203 (its port held
++ * by launchd), so Settings' Date & Time hangs and is killed 0x8badf00d. Status, exception, exit reason and the user
++ * backtrace of the exiting thread; 2 per name, 12 names, 30 lines a boot. Boot-arg b2l_short_bt=0 turns it off. */
++static void
++b2l_trace_shortlife(proc_t p, int rv, struct uthread *ut)
++{
++	static char names[12][MAXCOMLEN + 1];
++	static unsigned counts[12], used, total;
++	static int enabled = -1;
++	if (enabled < 0) {
++		int v = 1;
++		PE_parse_boot_argn("b2l_short_bt", &v, sizeof(v));
++		enabled = v;
++	}
++	if (!enabled || p != current_proc() || total >= 30) return;
++	uint64_t age = b2l_proc_age_ms(p);
++	if (age > 3000) return;
++	unsigned i;
++	for (i = 0; i < used; i++) {
++		if (!strncmp(names[i], p->p_comm, MAXCOMLEN)) break;
++	}
++	if (i == used) {
++		if (used >= 12) return;
++		strlcpy(names[used++], p->p_comm, sizeof(names[0]));
++	}
++	if (counts[i]++ >= 2) return;
++	total++;
++	os_reason_t r = p->p_exit_reason;
++	const char *desc = r != OS_REASON_NULL ? exit_reason_get_string_desc(r) : NULL;
++	b2l_early_trace("B2L SHORTLIFE: %s[%d] lived %llu ms status=0x%x exception=%u code=0x%llx sub=0x%llx ns=%u rcode=0x%llx desc=%.160s\n",
++	    p->p_comm, proc_getpid(p), age, rv, ut->uu_exception, (uint64_t)ut->uu_code, (uint64_t)ut->uu_subcode,
++	    r != OS_REASON_NULL ? r->osr_namespace : 0, r != OS_REASON_NULL ? r->osr_code : 0, desc ? desc : "none");
++	arm_saved_state_t *state = get_user_regs(current_thread());
++	if (state && is_saved_state64(state)) {
++		b2l_early_trace("B2L SHORTLIFE: pid=%d pc=0x%llx lr=0x%llx x0=0x%llx x16=0x%llx\n", proc_getpid(p),
++		    (uint64_t)get_saved_state_pc(state), (uint64_t)get_saved_state_lr(state),
++		    (uint64_t)get_saved_state_reg(state, 0), (uint64_t)get_saved_state_reg(state, 16));
++	}
++	uintptr_t bt[16];
++	struct backtrace_user_info info = BTUINFO_INIT;
++	unsigned frames = backtrace_user(bt, 16, NULL, &info);
++	for (unsigned k = 0; k < frames && k < 16; k++)
++		b2l_early_trace("B2L SHORTLIFE BT: pid=%d frame=%u pc=0x%llx\n", proc_getpid(p), k, (uint64_t)bt[k]);
++}
++
+ static void
+ b2l_trace_hang(proc_t p, struct uthread *ut)
+ {
+@@ -2153,11 +2210,14 @@
+ 	task_t task = proc_task(p);
+ 
+ #if defined(ARM64_BOARD_CONFIG_B2L)
+-	if (p == current_proc() && ut->uu_exception && !strncmp(p->p_comm, "backboardd", 10)) {
++	/* build 34: only a crash in backboardd's first minute (build 25's CoreBrightness crashed at start); build 33's
++	 * one crash, hours in and elsewhere, removed the brightness control for nothing */
++	if (p == current_proc() && ut->uu_exception && !strncmp(p->p_comm, "backboardd", 10) && b2l_proc_age_ms(p) < 60000) {
+ 		b2l_backlight_client_crashed(p->p_comm);
+ 	}
+ 	b2l_trace_crash(p, rv, ut);
+ 	b2l_trace_hang(p, ut);
++	b2l_trace_shortlife(p, rv, ut);
+ #endif
+ 
+ #if defined(ARM64_BOARD_CONFIG_B2L)

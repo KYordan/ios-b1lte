@@ -56,7 +56,7 @@ Tested on the phone unless marked otherwise. Build numbers are GitHub Actions ru
 | **Clock** | ✅ Works | Time from the PMIC RTC |
 | **Root filesystem** | ✅ Works | HFS+ root on UFS `userdata`, made on Linux. No swap file (HFS lacks protection class C) |
 | **SpringBoard & apps** | 🚧 Partial | Lock screen, home screen, dock, Control Center, Settings, Photos, App Library, Safari; widgets stay at "Waiting…", app-switcher snapshots are black; SpringBoard restarts now and then ("lockViewController/homeViewController is nil!") |
-| **Settings** | 🚧 Partial | Most panes open. **Date & Time and some others hang** and iOS kills Settings (0x8badf00d): they wait on `locationd`, which waits in turn on another service (being traced, builds 29–33) |
+| **Settings** | 🚧 Partial | Most panes open. **Date & Time and some others hang** and iOS kills Settings (0x8badf00d): they wait on `locationd`, whose main thread waits forever on `fairplayd.H2` (MIG routine 1203), and fairplayd dies right after every start (177 times in one boot). Build 34 logs why it dies |
 | **Power off / restart** | ✅ Works | Restart, power off from iOS and from the boot menu. Sequence as Samsung's kernel: PMIC WTSR/SMPL disarmed, APM stopped, then `PS_HOLD` low |
 | **Battery level** | ✅ Works | Level, voltage and current in Settings and the status bar (`B2LBattery`, MAX77705 fuel gauge) |
 | **Battery temperature** | ✅ Works | Build 30: battery, charger and USB-port thermistors on the Exynos ADC with the S10e DTB's tables; the battery's goes to iOS |
@@ -70,8 +70,8 @@ Tested on the phone unless marked otherwise. Build numbers are GitHub Actions ru
 ### Working on now
 
 1. **Charging under iOS** (build 33): positive current on a wall charger, the input limit following the charger's temperature.
-2. **Settings panes that hang** (Date & Time…): the kernel's wait profiler follows `locationd` and names the process each blocked thread sent to (`B2L PROF DEST`), to find the service it waits on.
-3. **Safari** with the Wi-Fi fix of build 31.
+2. **Settings panes that hang** (Date & Time…): found to be `locationd` waiting on `fairplayd.H2`, which keeps dying; build 34 records why (`B2L SHORTLIFE`).
+3. **Safari** with the Wi-Fi fix of build 31 (Wi-Fi now stays up; pages to be confirmed).
 4. Next: the microphone; the panel's native resolution so the GPU's frame needs no CPU copy; then, after Jesvi-iOS's notes, haptics, sensors and auto-brightness.
 
 Measured device facts, partition map and the build/boot history: [docs/device-facts-beyond0lte.md](docs/device-facts-beyond0lte.md).

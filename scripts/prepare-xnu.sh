@@ -79,7 +79,8 @@ python3 "$repo_root/scripts/apply-board-patches.py" "$xnu_path" \
   "$repo_root/patches/0109-b2l-register-overlay-sources.patch" \
   "$repo_root/patches/0110-b2l-webkit-no-jit.patch" \
   "$repo_root/patches/0111-b2l-backlight-crash-guard.patch" \
-  "$repo_root/patches/0112-b2l-watchdog-hang-backtrace.patch"
+  "$repo_root/patches/0112-b2l-watchdog-hang-backtrace.patch" \
+  "$repo_root/patches/0113-b2l-short-lived-exit-trace.patch"
 # New files have separate provenance and are kept as an overlay. A few overlay files are
 # complete replacements of upstream XNU files (sys_generic.c, kern_event.c, rtsock.c,
 # OSKext.cpp, corecrypto_sha1.c, IOUserClient.cpp; the last already carries patch 0004).
