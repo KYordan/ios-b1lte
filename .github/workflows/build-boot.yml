@@ -62,11 +62,16 @@ env:
 
 jobs:
   build:
-    name: XNU + ${{ inputs.board || 'beyond0lte' }} UEFI + boot.img
-    # Intel by default since 2026-11-24: the arm64 macOS runners were out of capacity ("The job was not acquired by
-    # Runner of type hosted even after multiple attempts", build 34). Every step builds for arm64 with Xcode, so the
-    # host architecture does not matter; pick macos-15 / macos-26 in Run workflow for an Apple-silicon runner.
-    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
+    name: XNU + ${{ inputs.board || 'beyond0lte' }} UEFI + boot.img (${{ matrix.runner }})
+    # A push builds on both: Apple silicon (macos-15, ~15 min, but its runners were out of capacity on 2026-11-23:
+    # "The job was not acquired by Runner of type hosted even after multiple attempts", build 34) and Intel
+    # (macos-15-intel, slower, starts at once). Every step builds for arm64 with Xcode, so either boot.img works;
+    # the Intel artifact name ends in -intel. Run workflow builds only on the runner picked there.
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(inputs.runner && format('["{0}"]', inputs.runner) || '["macos-15","macos-15-intel"]') }}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
     env:
       B2L_BOARD: ${{ inputs.board || 'beyond0lte' }}
@@ -302,7 +307,7 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.B2L_BOARD }}-boot-${{ github.run_number }}
+          name: ${{ env.B2L_BOARD }}-boot-${{ github.run_number }}${{ matrix.runner == 'macos-15-intel' && '-intel' || '' }}
           retention-days: 30
           if-no-files-found: error
           compression-level: 0
