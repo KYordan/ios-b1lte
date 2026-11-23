@@ -40,8 +40,10 @@ extern unsigned b2l_fb_zc_flip_count(void);
 #define B2L_PROF_CPU_HASH 2048
 #define B2L_PROF_WAIT_HASH 2048
 #define B2L_PROF_FRAMES   8
-/* B1L-0160: configd for the Wi-Fi (its KernelEventMonitor never primes); "backboardd" for the interface */
-#define B2L_PROF_TARGET   "backboardd"
+/* B1L-0160: configd for the Wi-Fi (its KernelEventMonitor never primes); "backboardd" for the interface.
+ * S10e build 30: locationd. Settings' Date & Time (DateAndTimeSupport -> CoreLocation) waits forever on a synchronous
+ * XPC reply from it (build 29 B2L HANG BT of Preferences, killed 0x8badf00d): where its threads wait. */
+#define B2L_PROF_TARGET   "locationd"
 
 struct b2l_prof_raw { uint64_t pc, lr, tid, x0, x1, far, kpc, klr; uint32_t kernel, esr; };
 static struct b2l_prof_raw b2l_prof_ring[B2L_PROF_CPUS][B2L_PROF_RING];
