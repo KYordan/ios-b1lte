@@ -2630,6 +2630,18 @@ B2LWifi::runDongle(volatile uint8_t *cfg, volatile uint8_t *bar0, volatile uint8
 	cc.rev = -1;
 	r = b2l_wifi_iovar(d, true, "country", &cc, sizeof(cc), nullptr, 0);
 	b2l_diag_record("B2L WIFI IOCTL: country %s status=%d\n", val, r);
+	/* S10e build 31: no roaming in the firmware. The WPA2 4-way handshake is ours (b2l_wpa.c), done once per join;
+	 * a firmware roam (WLC_E_ROAM_PREP 32, then WLC_E_REASSOC 9) needs a new handshake nobody does, and ~10 s later
+	 * the AP deauthenticates (WLC_E_DEAUTH_IND 6, reason 15 "4-way handshake timeout"): from then on nothing is
+	 * received (build 30: rx frozen at 146 frames 13 s after the join, so Safari loaded nothing). As dhd does for a
+	 * host supplicant without roam offload: roam_off 1, a lost link then goes through a full join again.
+	 * Boot-arg b2l_wifi_roam=1 leaves the firmware's roaming on. */
+	{
+		uint32_t roam = 0;
+		PE_parse_boot_argn("b2l_wifi_roam", &roam, sizeof(roam));
+		r = b2l_wifi_iovar_int(d, "roam_off", roam ? 0u : 1u);
+		b2l_diag_record("B2L WIFI IOCTL: roam_off %u status=%d\n", roam ? 0u : 1u, r);
+	}
 	bzero(text, sizeof(text));
 	b2l_wifi_iovar(d, false, "cap", nullptr, 0, text, sizeof(text) - 1);
 	b2l_diag_record("B2L WIFI CAP: %s\n", text);

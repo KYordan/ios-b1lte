@@ -28,6 +28,8 @@
 #include <mach/arm/thread_status.h>
 #include <libkern/OSAtomic.h>
 #include <kern/counter.h>
+#include <ipc/ipc_port.h>
+#include <ipc/ipc_space.h>
 
 extern char *proc_name_address(void *p);
 extern void *get_bsdtask_info(task_t t);
@@ -64,7 +66,7 @@ static uint32_t b2l_prof_ec[64][64];   /* [esr EC][ISS low 6 bits] */
 static uint64_t b2l_prof_faults0;
 static struct b2l_prof_cpu b2l_prof_cpu[B2L_PROF_CPU_HASH];
 
-struct b2l_prof_wait { uint64_t tid, pc, lr, f[B2L_PROF_FRAMES]; uint32_t n, used, run; };
+struct b2l_prof_wait { uint64_t tid, pc, lr, f[B2L_PROF_FRAMES]; uint32_t n, used, run, dest; };
 static struct b2l_prof_wait b2l_prof_wait[B2L_PROF_WAIT_HASH];
 
 static uint64_t b2l_prof_samples_user, b2l_prof_samples_kernel, b2l_prof_lost, b2l_prof_scans;
@@ -263,7 +265,7 @@ b2l_prof_find(void)
 	return found;
 }
 
-struct b2l_prof_snap { uint64_t tid, pc, lr, fp; int state; thread_t th; };
+struct b2l_prof_snap { uint64_t tid, pc, lr, fp, x3, x16; int state; thread_t th; };
 static struct b2l_prof_snap b2l_prof_snaps[B2L_PROF_THREADS];
 
 static void
@@ -285,6 +287,8 @@ b2l_prof_scan(task_t task)
 		b2l_prof_snaps[n].pc = u ? get_saved_state_pc(u) : 0;
 		b2l_prof_snaps[n].lr = u ? get_saved_state_lr(u) : 0;
 		b2l_prof_snaps[n].fp = u ? get_saved_state_fp(u) : 0;
+		b2l_prof_snaps[n].x3 = u ? get_saved_state_reg(u, 3) : 0;
+		b2l_prof_snaps[n].x16 = u ? get_saved_state_reg(u, 16) : 0;
 		n++;
 	}
 	task_unlock(task);
@@ -313,6 +317,9 @@ b2l_prof_scan(task_t task)
 			struct b2l_prof_wait *w = &b2l_prof_wait[i];
 			if (!w->used) {
 				w->used = 1; w->n = 1; w->tid = s->tid; w->pc = s->pc; w->lr = s->lr; w->run = run;
+				/* S10e build 31: a thread in mach_msg2_trap (x16 = -47) keeps the send's msgh_remote_port in x3's
+				 * low half (mach_msg2_trap_args.msgh_remote_and_local_port): who it waits on, named at report time */
+				w->dest = (waiting && s->x16 == (uint64_t)-47) ? (uint32_t)s->x3 : 0;
 				memcpy(w->f, f, sizeof(f));
 				break;
 			}
@@ -340,6 +347,29 @@ b2l_prof_scan(task_t task)
 			task_unlock(task);
 		}
 	}
+}
+
+/* S10e build 31: the process holding the receive right a waiting thread sent to (launchd: the service never checked in) */
+static void
+b2l_prof_name_dest(task_t task, uint64_t tid, uint32_t name)
+{
+	ipc_space_t space = task->itk_space;
+	ipc_port_t port = IP_NULL;
+	char who[32] = "-";
+	pid_t pid = -1;
+	kern_return_t kr = space ? ipc_port_translate_send(space, (mach_port_name_t)name, &port) : KERN_INVALID_TASK;
+	if (kr == KERN_SUCCESS && port != IP_NULL) {
+		task_t receiver = TASK_NULL;
+		pid = ipc_port_get_receiver_task_locked(port, &receiver);
+		if (receiver != TASK_NULL) {
+			void *p = get_bsdtask_info(receiver);
+			if (p) strlcpy(who, proc_name_address(p), sizeof(who));
+		} else if (ip_in_space(port, ipc_space_kernel)) {
+			strlcpy(who, "kernel", sizeof(who));
+		}
+		ip_mq_unlock(port);
+	}
+	printf("B2L PROF DEST: tid 0x%llx sent to port 0x%x -> %s (pid %d, kr %d)\n", tid, name, who, pid, kr);
 }
 
 static void
@@ -413,6 +443,9 @@ b2l_prof_report(task_t task, uint64_t ms, unsigned swaps, unsigned flips)
 			printf("B2L PROF %s: %u tid 0x%llx pc 0x%llx lr 0x%llx f 0x%llx 0x%llx 0x%llx 0x%llx 0x%llx 0x%llx 0x%llx 0x%llx\n",
 			    pass ? "RUN" : "WAIT", w->n, w->tid, w->pc, w->lr, w->f[0], w->f[1], w->f[2], w->f[3], w->f[4], w->f[5],
 			    w->f[6], w->f[7]);
+			if (w->dest != 0 && w->dest != (uint32_t)MACH_PORT_DEAD) {
+				b2l_prof_name_dest(task, w->tid, w->dest);
+			}
 			w->used = 0;
 		}
 	}
