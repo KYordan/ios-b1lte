@@ -100,12 +100,25 @@ jobs:
 
       - name: Toolchain
         run: |
-          brew update
-          brew install llvm lld nasm acpica rsync sevenzip
           mkdir -p out/llvm-bin
-          ln -sf "$(brew --prefix llvm)/bin/"* out/llvm-bin/
-          ln -sf "$(brew --prefix lld)/bin/lld-link" out/llvm-bin/lld-link
-          ln -sf "$(brew --prefix lld)/bin/ld.lld" out/llvm-bin/ld.lld
+          if [[ "$(uname -m)" == x86_64 ]]; then
+            # Intel runner: Homebrew has no Intel bottle of the current llvm and compiles it (and cmake) from
+            # source, hours past the timeout (build 36). Use the image's preinstalled llvm@18, which still ships
+            # lld, and install only the small tools, without brew update.
+            export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1 HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
+            brew install nasm acpica rsync sevenzip
+            llvm="$(brew --prefix llvm@18)"
+            [[ -x "$llvm/bin/clang" && -x "$llvm/bin/lld-link" && -x "$llvm/bin/ld.lld" ]] || {
+              echo "::error::llvm@18 with lld is not preinstalled on this runner image"; exit 1; }
+            ln -sf "$llvm/bin/"* out/llvm-bin/
+          else
+            brew update
+            brew install llvm lld nasm acpica rsync sevenzip
+            ln -sf "$(brew --prefix llvm)/bin/"* out/llvm-bin/
+            ln -sf "$(brew --prefix lld)/bin/lld-link" out/llvm-bin/lld-link
+            ln -sf "$(brew --prefix lld)/bin/ld.lld" out/llvm-bin/ld.lld
+          fi
+          out/llvm-bin/clang --version | head -n 1
           echo "CLANG_BIN=$GITHUB_WORKSPACE/out/llvm-bin" >> "$GITHUB_ENV"
           echo "$GITHUB_WORKSPACE/out/llvm-bin" >> "$GITHUB_PATH"
           python3 -m venv out/venv
