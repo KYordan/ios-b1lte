@@ -12,7 +12,8 @@
  * instead (we never change currents, so we stop):
  *   battery   stop >= 45.0, again <= 42.0   (Samsung: 1050 mA from 41.0, stop at 50.0)
  *   battery   stop <=  5.0, again >=  7.0   (Samsung: 300 mA below 5.0, stop at 0.0)
- *   charger   stop >= 46.0, again <= 44.0   (Samsung battery,chg_high_temp 46.0 / 44.0: input limit 1000 mA)
+ *   charger   stop >= 55.0, again <= 50.0   (build 33; from 46.0 until 44.0 the input is 1000 mA, as Samsung's
+ *                                           battery,chg_high_temp / chg_input_limit_current)
  *   USB port  stop >= 50.0, again <= 45.0
  * Readings of 85 C or more, or below -20 C (a short, an open thermistor, a failed conversion), are unknown: no charge.
  */
@@ -51,6 +52,7 @@ b2l_temp_from_adc(int raw, const uint16_t *t)
 struct b2l_charge_gate {
 	int allowed;                        /* 1: the last decision allowed charging */
 	const char *why;                    /* why not, while not allowed */
+	int chg_hot;                        /* build 33: charger >= 46 C (until <= 44 C): input lowered, as Samsung */
 };
 
 /* One decision from three readings (0.1 C). Once stopped, every limit must be back on its "again" side. */
@@ -62,12 +64,15 @@ b2l_charge_allowed(struct b2l_charge_gate *g, int bat, int chg, int usb)
 		g->why = "a thermistor reads nothing usable";
 		return 0;
 	}
+	/* build 33: the charger's thermistor sits by the SoC (40 C with no cable at all, 46.8 C 10 s into a 1500 mA charge
+	 * in build 32): as Samsung (battery,chg_high_temp 46.0 / 44.0) it lowers the input; charging stops at 55 C */
+	g->chg_hot = g->chg_hot ? chg > 440 : chg >= 460;
 	if (g->allowed) {
-		g->why = bat >= 450 ? "battery at 45 C" : bat <= 50 ? "battery at 5 C" : chg >= 460 ? "charger at 46 C" :
+		g->why = bat >= 450 ? "battery at 45 C" : bat <= 50 ? "battery at 5 C" : chg >= 550 ? "charger at 55 C" :
 		    usb >= 500 ? "USB port at 50 C" : "";
 		g->allowed = !g->why[0];
 	} else {
-		g->why = bat > 420 ? "battery above 42 C" : bat < 70 ? "battery below 7 C" : chg > 440 ? "charger above 44 C" :
+		g->why = bat > 420 ? "battery above 42 C" : bat < 70 ? "battery below 7 C" : chg > 500 ? "charger above 50 C" :
 		    usb > 450 ? "USB port above 45 C" : "";
 		g->allowed = !g->why[0];
 	}
@@ -81,16 +86,17 @@ b2l_charge_allowed(struct b2l_charge_gate *g, int bat, int chg, int usb)
  * below 15 C; ours: 1500 in / 1000 charge from a CDP or DCP with the battery at 15..41 C, S-Boot's values otherwise
  * (charging itself is stopped outside 7..42/45 C by b2l_charge_allowed). After Jesvi-iOS's bms_ilim (S20). */
 #define B2L_CHG_IN_MA      1500
+#define B2L_CHG_IN_HOT_MA  1000        /* Samsung's battery,chg_input_limit_current while the charger is hot */
 #define B2L_CHG_CC_MA      1000
 static inline void
-b2l_charge_limits(unsigned bc, int bat, int allowed, unsigned *in_ma, unsigned *cc_ma)
+b2l_charge_limits(unsigned bc, int bat, int allowed, int chg_hot, unsigned *in_ma, unsigned *cc_ma)
 {
 	unsigned type = bc & 3u;
 	*in_ma = *cc_ma = 0;
 	if (!allowed || !(bc & 0x80u) || (type != 2 && type != 3) || bat == B2L_TEMP_UNKNOWN || bat < 150 || bat > 410) {
 		return;
 	}
-	*in_ma = B2L_CHG_IN_MA;
+	*in_ma = chg_hot ? B2L_CHG_IN_HOT_MA : B2L_CHG_IN_MA;
 	*cc_ma = B2L_CHG_CC_MA;
 }
 

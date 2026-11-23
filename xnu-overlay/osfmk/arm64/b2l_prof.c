@@ -265,7 +265,7 @@ b2l_prof_find(void)
 	return found;
 }
 
-struct b2l_prof_snap { uint64_t tid, pc, lr, fp, x3, x16; int state; thread_t th; };
+struct b2l_prof_snap { uint64_t tid, pc, lr, fp, x1, x3, x16; int state; thread_t th; };
 static struct b2l_prof_snap b2l_prof_snaps[B2L_PROF_THREADS];
 
 static void
@@ -287,6 +287,7 @@ b2l_prof_scan(task_t task)
 		b2l_prof_snaps[n].pc = u ? get_saved_state_pc(u) : 0;
 		b2l_prof_snaps[n].lr = u ? get_saved_state_lr(u) : 0;
 		b2l_prof_snaps[n].fp = u ? get_saved_state_fp(u) : 0;
+		b2l_prof_snaps[n].x1 = u ? get_saved_state_reg(u, 1) : 0;
 		b2l_prof_snaps[n].x3 = u ? get_saved_state_reg(u, 3) : 0;
 		b2l_prof_snaps[n].x16 = u ? get_saved_state_reg(u, 16) : 0;
 		n++;
@@ -319,7 +320,9 @@ b2l_prof_scan(task_t task)
 				w->used = 1; w->n = 1; w->tid = s->tid; w->pc = s->pc; w->lr = s->lr; w->run = run;
 				/* S10e build 31: a thread in mach_msg2_trap (x16 = -47) keeps the send's msgh_remote_port in x3's
 				 * low half (mach_msg2_trap_args.msgh_remote_and_local_port): who it waits on, named at report time */
-				w->dest = (waiting && s->x16 == (uint64_t)-47) ? (uint32_t)s->x3 : 0;
+				/* build 33: only when the trap sent (options x1 has MACH64_SEND_MSG): a receive-only wait has no
+				 * destination in x3 (build 32 showed locationd "waiting on itself") */
+				w->dest = (waiting && s->x16 == (uint64_t)-47 && (s->x1 & 1u)) ? (uint32_t)s->x3 : 0;
 				memcpy(w->f, f, sizeof(f));
 				break;
 			}

@@ -107,7 +107,7 @@ class B2LBattery : public IOPMPowerSource {
 		uint8_t bc = 0;
 		if (external && !readRegs(0x25, 0x08, &bc, 1)) bc = 0;   /* USB-C firmware BC_STATUS */
 		unsigned in = 0, cc = 0;
-		b2l_charge_limits(bc, fTemp[0], allowed, &in, &cc);
+		b2l_charge_limits(bc, fTemp[0], allowed, fGate.chg_hot, &in, &cc);
 		if (in == fLimIn) return;
 		uint8_t old02 = fBoot02, old09 = fBoot09;
 		if (in) {
@@ -462,6 +462,7 @@ public:
 		fRaw[0] = fRaw[1] = fRaw[2] = -1;
 		fGate.allowed = 0;
 		fGate.why = "";
+		fGate.chg_hot = 0;
 		uint32_t kick = 1;
 		PE_parse_boot_argn("b2l_chg_wdt", &kick, sizeof(kick));
 		bool adc = adcSetup();
