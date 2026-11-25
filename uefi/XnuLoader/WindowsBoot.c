@@ -17,6 +17,7 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include "WindowsBoot.h"
+#include "WindowsSmp.h"
 
 /* An installed Windows has the first; Windows install media (an ISO's efi folder) only the second, the same
  * Windows Boot Manager under the removable-media name. Both read \EFI\Microsoft\Boot\BCD. */
@@ -62,6 +63,9 @@ B2lBootWindows(EFI_HANDLE ImageHandle)
         Print(L"The Windows EFI system partition is not set up yet.\r\n");
         return EFI_NOT_FOUND;
     }
+
+    /* Secondaries into parking-protocol mailboxes (WindowsSmp.c): Windows' own PSCI CPU_ON resets the 9820. */
+    B2lWindowsParkSecondaries();
 
     Path = FileDevicePath(Volume, Manager);
     if (Path == NULL) return EFI_OUT_OF_RESOURCES;

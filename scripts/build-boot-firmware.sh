@@ -17,8 +17,10 @@ if [[ "${B2L_WINDOWS_ACPI:-0}" == 1 ]]; then
   # Touchscreen devices (I2C0 + TSP0) for the exynos9810-woa S10e drivers.
   "${PYTHON_COMMAND:-python3}" "$repo_root/scripts/windows-acpi-devices.py" "$acpi_dir/DSDT_minimal.dsl"
   # The overlay left only CPU0 enabled; Windows gets CPU0..CPU(N-1) (BCD numproc still caps what it starts).
+  # Default 6: the A55s and A75s, which the boot menu parks for Windows (uefi/XnuLoader/WindowsSmp.c); the M4s
+  # lack LDAPR the A55/A75 have (iOS build 0076), so Windows stays on one ISA for now.
   "${PYTHON_COMMAND:-python3}" "$repo_root/scripts/windows-acpi-cpus.py" \
-    "$acpi_dir/APIC.dsl" "$acpi_dir/DSDT_minimal.dsl" --cpus "${B2L_WINDOWS_CPUS:-8}"
+    "$acpi_dir/APIC.dsl" "$acpi_dir/DSDT_minimal.dsl" --cpus "${B2L_WINDOWS_CPUS:-6}"
   for table in APIC FACP GTDT DSDT_minimal; do
     (cd "$acpi_dir" && iasl -ve "$table.dsl")
     test -s "$acpi_dir/$table.aml"

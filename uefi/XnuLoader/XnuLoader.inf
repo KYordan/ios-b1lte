@@ -29,6 +29,9 @@
   BootMenuDraw.h
   WindowsBoot.c
   WindowsBoot.h
+  WindowsSmp.c
+  WindowsSmp.h
+  ParkStub.S
   FontSpleen16x32.h
   FontSpleen32x64.h
   BootPayload.c
@@ -69,6 +72,8 @@
 
 [Guids]
   gEfiFileInfoGuid
+  gEfiAcpi20TableGuid
+  gEfiAcpi10TableGuid
 
 [BuildOptions]
   *_*_*_CC_FLAGS = -DB2L_UEFI_BUILD -DB2L_MENU_TIMEOUT_S=10
