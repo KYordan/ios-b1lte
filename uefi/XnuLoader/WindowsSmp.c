@@ -218,16 +218,25 @@ B2lWindowsParkSecondaries(VOID)
         /* The parked cores fetch and read with caches off: everything goes to the point of coherency first. */
         B2lCleanInvalidate((UINTN)Pages, Count * EFI_PAGE_SIZE);
         __asm__ volatile("ic iallu\n dsb sy\n isb" : : : "memory");
-        for (UINTN U = 1; U < B2L_MAX_CPUS; U++)
-            if (S.Enabled[U])
-                S.OnResult[U] = B2lSmc4(B2L_PSCI_CPU_ON64, mPsciTarget[U], S.Mailbox[U] + B2L_PARK_STUB_OFF, 0);
-        gBS->Stall(50000);
+        /* One core at a time. #44 issued the five CPU_ONs back to back: all returned 0, but only the last core's
+         * mailbox saw a check-in (CPU5, MPIDR 0x500), i.e. Samsung's EL3 keeps one entry address and every core that
+         * powered up late ran CPU5's stub; five cores then entered Windows through one mailbox (PANIC_STACK_SWITCH).
+         * So each CPU_ON waits for its own core to check in before the next one, and a core that reports an MPIDR
+         * already seen is not trusted. */
         for (UINTN U = 1; U < B2L_MAX_CPUS; U++) {
-            if (!S.Enabled[U] || S.OnResult[U] != 0) continue;
+            if (!S.Enabled[U]) continue;
             UINT8 *Mail = (UINT8 *)(UINTN)S.Mailbox[U];
-            B2lCleanInvalidate((UINTN)(Mail + B2L_PARK_MPIDR_OFF), 0x18);
-            S.Alive[U] = ReadUnaligned64((CONST UINT64 *)(Mail + B2L_PARK_ALIVE_OFF)) == B2L_PARK_ALIVE;
+            S.OnResult[U] = B2lSmc4(B2L_PSCI_CPU_ON64, mPsciTarget[U], S.Mailbox[U] + B2L_PARK_STUB_OFF, 0);
+            if (S.OnResult[U] != 0) continue;
+            for (UINTN Ms = 0; Ms < 500 && !S.Alive[U]; Ms++) {
+                gBS->Stall(1000);
+                B2lCleanInvalidate((UINTN)(Mail + B2L_PARK_MPIDR_OFF), 0x18);
+                S.Alive[U] = ReadUnaligned64((CONST UINT64 *)(Mail + B2L_PARK_ALIVE_OFF)) == B2L_PARK_ALIVE;
+            }
             S.Mpidr[U] = ReadUnaligned64((CONST UINT64 *)(Mail + B2L_PARK_MPIDR_OFF)) & B2L_MPIDR_AFF_MASK;
+            for (UINTN V = 0; V < U && S.Alive[U]; V++)
+                if ((V == 0 && S.Mpidr[U] == B2lOwnMpidr()) || (V != 0 && S.Alive[V] && S.Mpidr[V] == S.Mpidr[U]))
+                    S.Alive[U] = FALSE;
             Parked += S.Alive[U] ? 1 : 0;
         }
     }
