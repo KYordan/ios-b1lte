@@ -16,6 +16,9 @@ if [[ "${B2L_WINDOWS_ACPI:-0}" == 1 ]]; then
   command -v iasl >/dev/null || { echo "iasl missing (brew install acpica)" >&2; exit 1; }
   # Touchscreen devices (I2C0 + TSP0) for the exynos9810-woa S10e drivers.
   "${PYTHON_COMMAND:-python3}" "$repo_root/scripts/windows-acpi-devices.py" "$acpi_dir/DSDT_minimal.dsl"
+  # The overlay left only CPU0 enabled; Windows gets CPU0..CPU(N-1) (BCD numproc still caps what it starts).
+  "${PYTHON_COMMAND:-python3}" "$repo_root/scripts/windows-acpi-cpus.py" \
+    "$acpi_dir/APIC.dsl" "$acpi_dir/DSDT_minimal.dsl" --cpus "${B2L_WINDOWS_CPUS:-8}"
   for table in APIC FACP GTDT DSDT_minimal; do
     (cd "$acpi_dir" && iasl -ve "$table.dsl")
     test -s "$acpi_dir/$table.aml"

@@ -272,6 +272,7 @@ jobs:
           scripts/test-loader.sh
           python3 tests/test_board_profiles.py
           python3 tests/test_prepare_boot_firmware.py
+          python3 tests/test_windows_acpi_cpus.py
           B2L_EXTERNAL_MEMORY_MAP="$MU_WORK_TREE/Platforms/Samsung/beyond2ltePkg/Library/MemoryMapLib/MemoryMapLib.c" \
             PYTHONPATH=scripts python3 tests/test_memory_profile.py
 
