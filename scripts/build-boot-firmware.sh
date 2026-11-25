@@ -14,6 +14,8 @@ if [[ "${B2L_ENABLE_TOUCH:-0}" == 1 ]]; then prepare_options+=(--enable-touch); 
 if [[ "${B2L_WINDOWS_ACPI:-0}" == 1 ]]; then
   acpi_dir="$WORKSPACE/Silicium-ACPI/SoCs/Samsung/S5E9820"
   command -v iasl >/dev/null || { echo "iasl missing (brew install acpica)" >&2; exit 1; }
+  # Touchscreen devices (I2C0 + TSP0) for the exynos9810-woa S10e drivers.
+  "${PYTHON_COMMAND:-python3}" "$repo_root/scripts/windows-acpi-devices.py" "$acpi_dir/DSDT_minimal.dsl"
   for table in APIC FACP GTDT DSDT_minimal; do
     (cd "$acpi_dir" && iasl -ve "$table.dsl")
     test -s "$acpi_dir/$table.aml"
