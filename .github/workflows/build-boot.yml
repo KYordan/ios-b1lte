@@ -63,14 +63,15 @@ env:
 jobs:
   build:
     name: XNU + ${{ inputs.board || 'beyond0lte' }} UEFI + boot.img (${{ matrix.runner }})
-    # A push builds on both: Apple silicon (macos-15, ~15 min, but its runners were out of capacity on 2026-11-23:
-    # "The job was not acquired by Runner of type hosted even after multiple attempts", build 34) and Intel
-    # (macos-15-intel, slower, starts at once). Every step builds for arm64 with Xcode, so either boot.img works;
-    # the Intel artifact name ends in -intel. Run workflow builds only on the runner picked there.
+    # A push builds on Apple silicon only (macos-15, ~15 min; user's choice 2026-11-25). Its runners were out of
+    # capacity on 2026-11-23 ("The job was not acquired by Runner of type hosted even after multiple attempts",
+    # build 34): then use Run workflow with macos-15-intel (slower, starts at once; artifact name ends in -intel),
+    # or add "macos-15-intel" back to the push list below. Every step builds for arm64 with Xcode, so either
+    # boot.img works. Run workflow builds only on the runner picked there.
     strategy:
       fail-fast: false
       matrix:
-        runner: ${{ fromJSON(inputs.runner && format('["{0}"]', inputs.runner) || '["macos-15","macos-15-intel"]') }}
+        runner: ${{ fromJSON(inputs.runner && format('["{0}"]', inputs.runner) || '["macos-15"]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
     env:
