@@ -65,7 +65,7 @@ B2lBootWindows(EFI_HANDLE ImageHandle)
     }
 
     /* Secondaries into parking-protocol mailboxes (WindowsSmp.c): Windows' own PSCI CPU_ON resets the 9820. */
-    B2lWindowsParkSecondaries();
+    B2lWindowsParkSecondaries(Volume);
 
     Path = FileDevicePath(Volume, Manager);
     if (Path == NULL) return EFI_OUT_OF_RESOURCES;
