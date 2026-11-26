@@ -24,7 +24,9 @@
  *   off      park nothing and disable every secondary in the MADT: one-CPU Windows whatever the BCD says;
  *   hold     a released core paints its band and stays parked instead of entering Windows;
  *   nopsci   clear the FADT's PSCI_COMPLIANT/PSCI_USE_HVC bits, so Windows has only the parking protocol;
- *   fwmpidr  keep the table's firmware MPIDRs (0..5) instead of the observed EL1 values.
+ *   fwmpidr  keep the table's firmware MPIDRs (0..5) instead of the observed EL1 values;
+ *   park0    also give CPU0 ParkingProtocolVersion 1 and a mailbox page of its own (never released), as Open-RT's
+ *            Windows RT MADT does for its boot CPU: Windows may only pick the protocol when every GICC has it.
  */
 #include <Uefi.h>
 #include <Guid/Acpi.h>
@@ -67,7 +69,7 @@ STATIC CONST UINT32 mBandColor[B2L_MAX_CPUS] = { 0, 0x00FF0000, 0x0000FF00, 0x00
 STATIC BOOLEAN mParked;
 
 typedef struct {
-    BOOLEAN Off, Hold, NoPsci, FwMpidr;
+    BOOLEAN Off, Hold, NoPsci, FwMpidr, Park0;
 } B2L_SMP_OPTIONS;
 
 STATIC UINT64
@@ -192,6 +194,7 @@ B2lReadOptions(EFI_HANDLE Volume, B2L_SMP_OPTIONS *O)
         O->Hold = AsciiStrStr(Buf, "hold") != NULL;
         O->NoPsci = AsciiStrStr(Buf, "nopsci") != NULL;
         O->FwMpidr = AsciiStrStr(Buf, "fwmpidr") != NULL;
+        O->Park0 = AsciiStrStr(Buf, "park0") != NULL;
     }
     Root->Close(Root);
 }
@@ -203,6 +206,7 @@ typedef struct {
     UINT64 Mpidr[B2L_MAX_CPUS];
     BOOLEAN Alive[B2L_MAX_CPUS];
     BOOLEAN FwMpidr;
+    UINT64 Cpu0Mailbox;     /* park0: CPU0's own (never released) mailbox page, 0 = none */
 } B2L_PARK_STATE;
 
 STATIC VOID
@@ -222,6 +226,10 @@ B2lPatchGicc(VOID *Context, UINT8 *Gicc)
     if (Uid >= B2L_MAX_CPUS || !(Flags & 1)) return;
     if (Uid == 0) {
         if (!S->FwMpidr) WriteUnaligned64((UINT64 *)(Gicc + 68), B2lOwnMpidr());
+        if (S->Cpu0Mailbox != 0) {
+            WriteUnaligned32((UINT32 *)(Gicc + 16), 1);
+            WriteUnaligned64((UINT64 *)(Gicc + 24), S->Cpu0Mailbox);
+        }
     } else if (S->Alive[Uid]) {
         WriteUnaligned32((UINT32 *)(Gicc + 16), 1);                  /* ParkingProtocolVersion */
         WriteUnaligned64((UINT64 *)(Gicc + 24), S->Mailbox[Uid]);    /* ParkedAddress */
@@ -262,9 +270,10 @@ B2lWindowsParkSecondaries(EFI_HANDLE Volume)
     ZeroMem(&S, sizeof(S));
     B2lReadOptions(Volume, &O);
     S.FwMpidr = O.FwMpidr;
-    Print(L"Windows SMP options (\\b2l-smp.txt):%s%s%s%s%s\r\n", O.Off ? L" off" : L"", O.Hold ? L" hold" : L"",
-          O.NoPsci ? L" nopsci" : L"", O.FwMpidr ? L" fwmpidr" : L"",
-          (O.Off || O.Hold || O.NoPsci || O.FwMpidr) ? L"" : L" none");
+    BOOLEAN AnyOption = O.Off || O.Hold || O.NoPsci || O.FwMpidr || O.Park0;
+    Print(L"Windows SMP options (\\b2l-smp.txt):%s%s%s%s%s%s\r\n", O.Off ? L" off" : L"", O.Hold ? L" hold" : L"",
+          O.NoPsci ? L" nopsci" : L"", O.FwMpidr ? L" fwmpidr" : L"", O.Park0 ? L" park0" : L"",
+          AnyOption ? L"" : L" none");
     UINTN NumMadts = B2lFindTables(SIGNATURE_32('A', 'P', 'I', 'C'), Madts);
     if (NumMadts == 0) {
         Print(L"Windows SMP: no valid MADT, one CPU.\r\n");
@@ -286,6 +295,14 @@ B2lWindowsParkSecondaries(EFI_HANDLE Volume)
         }
     }
     if (Count != 0 && EFI_ERROR(gBS->LocateProtocol(&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **)&Gop))) Gop = NULL;
+    if (Count != 0 && O.Park0) {
+        EFI_PHYSICAL_ADDRESS P0 = 0xFFFFFFFFull;
+        if (!EFI_ERROR(gBS->AllocatePages(AllocateMaxAddress, EfiReservedMemoryType, 1, &P0))) {
+            ZeroMem((VOID *)(UINTN)P0, EFI_PAGE_SIZE);   /* ProcessorId 0, JumpAddress 0: CPU0 never polls it */
+            B2lCleanInvalidate((UINTN)P0, EFI_PAGE_SIZE);
+            S.Cpu0Mailbox = P0;
+        }
+    }
 
     UINTN Slot = 0;
     for (UINTN U = 1; U < B2L_MAX_CPUS && Count != 0; U++) {
@@ -339,11 +356,12 @@ B2lWindowsParkSecondaries(EFI_HANDLE Volume)
     Print(L"Windows SMP: CPU0 MPIDR 0x%lx; parked %u of %u secondaries (%u MADT copies)%s\r\n", B2lOwnMpidr(),
           (UINT32)Parked, (UINT32)Count, (UINT32)NumMadts, O.Off ? L", all disabled (off)" : L"");
     if (O.NoPsci) Print(L"  FADT ARM boot flags 0x%x -> PSCI bits cleared\r\n", (UINT32)OldPsci);
+    if (O.Park0) Print(L"  CPU0 mailbox 0x%lx (parking version 1)\r\n", S.Cpu0Mailbox);
     for (UINTN U = 1; U < B2L_MAX_CPUS; U++)
         if (S.Enabled[U] && Count != 0)
             Print(L"  CPU%u psci 0x%lx: CPU_ON %ld, %s, MPIDR 0x%lx, mailbox 0x%lx\r\n", (UINT32)U, mPsciTarget[U],
                   (INT64)S.OnResult[U], S.Alive[U] ? L"parked" : L"NOT PARKED (disabled)", S.Mpidr[U], S.Mailbox[U]);
     /* Long enough to photograph whenever something is off or an experiment is selected. */
-    if (Parked != Count || O.Off || O.Hold || O.NoPsci || O.FwMpidr) gBS->Stall(3000000);
+    if (Parked != Count || AnyOption) gBS->Stall(3000000);
     return EFI_SUCCESS;
 }
